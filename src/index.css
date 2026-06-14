@@ -1,0 +1,859 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+
+/* ============================================================
+   RESET & BASE
+   ============================================================ */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Space Mono', monospace;
+  overflow: hidden;
+  background: #050e1a;
+  color: #e0e6ed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================================
+   APP CONTAINER
+   ============================================================ */
+
+.app-container {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ============================================================
+   MAP AREA
+   ============================================================ */
+
+.map-area {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 340px;      /* stop at the sidebar left edge */
+  bottom: 0;
+  z-index: 1;
+  overflow: hidden;
+  background: #050e1a;
+  display: block;
+}
+
+canvas.map-area {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ============================================================
+   HEADER PANEL
+   ============================================================ */
+
+.header-panel {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 10;
+  background: rgba(8, 18, 35, 0.85);
+  border: 1px solid rgba(0, 229, 255, 0.15);
+  border-radius: 4px;
+  padding: 12px 16px;
+}
+
+.header-label {
+  font-size: 0.65rem;
+  color: #5a7a9a;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.header-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #e0e6ed;
+  letter-spacing: 0.05em;
+}
+
+/* ============================================================
+   STATUS BAR
+   ============================================================ */
+
+.status-bar {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  background: rgba(8, 18, 35, 0.85);
+  border: 1px solid rgba(0, 229, 255, 0.15);
+  border-radius: 4px;
+  padding: 8px 20px;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #00e5ff;
+  box-shadow: 0 0 8px #00e5ff;
+  animation: pulse 2s infinite;
+}
+
+.live-text {
+  color: #00e5ff;
+  font-weight: 700;
+}
+
+.status-label {
+  color: #5a7a9a;
+}
+
+.status-value {
+  color: #e0e6ed;
+  font-weight: 700;
+}
+
+/* ============================================================
+   KEYFRAMES
+   ============================================================ */
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================================
+   RIGHT SIDEBAR
+   ============================================================ */
+
+.sidebar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 340px;
+  height: 100vh;
+  z-index: 10;
+  background: rgba(8, 18, 35, 0.92);
+  border-left: 1px solid rgba(0, 229, 255, 0.15);
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+}
+
+/* -- Sidebar Header -- */
+
+.sidebar-header {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(90, 122, 154, 0.15);
+  position: relative;
+}
+
+.sidebar-header-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-header-icon {
+  color: #00e5ff;
+}
+
+.sidebar-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #e0e6ed;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin: 0;
+}
+
+.sidebar-subtitle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.sidebar-subtitle {
+  font-size: 0.65rem;
+  color: #5a7a9a;
+  margin: 0;
+}
+
+.sidebar-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* -- Search Bar -- */
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(10, 22, 40, 0.6);
+  border: 1px solid rgba(90, 122, 154, 0.2);
+  border-radius: 3px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.search-bar input {
+  background: transparent;
+  border: none;
+  color: #e0e6ed;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.75rem;
+  width: 100%;
+  outline: none;
+}
+
+.search-bar input::placeholder {
+  color: #5a7a9a;
+}
+
+.search-bar:focus-within {
+  border-color: #00e5ff;
+  background: rgba(0, 229, 255, 0.02);
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.1);
+}
+
+.search-clear-btn {
+  background: transparent;
+  border: none;
+  color: #5a7a9a;
+  cursor: pointer;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.search-clear-btn:hover {
+  color: #e0e6ed;
+}
+
+/* -- Categories -- */
+
+.categories {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.category-btn {
+  background: rgba(10, 22, 40, 0.6);
+  border: 1px solid rgba(90, 122, 154, 0.2);
+  color: #8fa0b3;
+  padding: 8px 10px;
+  border-radius: 3px;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.category-btn::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: transparent;
+  transition: background-color 0.2s ease;
+}
+
+/* Category LED lights / colors */
+.category-btn.all::before { background: #e0e6ed; }
+.category-btn.station::before { background: #00e5ff; }
+.category-btn.starlink::before { background: #9ca3af; }
+.category-btn.gps::before { background: #00c853; }
+.category-btn.weather::before { background: #ff6d00; }
+.category-btn.other::before { background: #5a7a9a; }
+
+.category-btn:hover {
+  border-color: rgba(0, 229, 255, 0.4);
+  color: #e0e6ed;
+  background: rgba(0, 229, 255, 0.03);
+}
+
+.category-btn.active {
+  background: rgba(0, 229, 255, 0.08);
+  border-color: #00e5ff;
+  color: #00e5ff;
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.1);
+}
+
+.category-btn-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.category-btn-count {
+  font-size: 0.6rem;
+  color: #5a7a9a;
+  background: rgba(5, 14, 26, 0.6);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+.category-btn.active .category-btn-count {
+  color: #00e5ff;
+}
+
+/* -- Satellite List -- */
+
+.satellite-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.6rem;
+  color: #5a7a9a;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+
+.satellite-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(90, 122, 154, 0.25) transparent;
+}
+
+.satellite-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.satellite-list::-webkit-scrollbar-thumb {
+  background: rgba(90, 122, 154, 0.25);
+  border-radius: 2px;
+}
+
+.satellite-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.no-sats-found {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 20px;
+  color: #5a7a9a;
+  text-align: center;
+}
+
+.no-sats-icon {
+  color: rgba(90, 122, 154, 0.4);
+  animation: pulse 2s infinite;
+}
+
+.no-sats-found p {
+  font-size: 0.7rem;
+}
+
+/* -- Satellite Item Cards -- */
+
+.satellite-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  background: rgba(10, 22, 40, 0.4);
+  border: 1px solid rgba(90, 122, 154, 0.15);
+  border-left: 3px solid var(--sat-color, #5a7a9a);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.satellite-item:hover {
+  background: rgba(10, 22, 40, 0.85);
+  border-color: rgba(0, 229, 255, 0.3);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  transform: translateX(-2px);
+}
+
+.satellite-item.selected {
+  background: rgba(0, 229, 255, 0.08);
+  border-color: #00e5ff;
+  border-left-color: var(--sat-color, #00e5ff);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.15);
+}
+
+.sat-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin-right: 8px;
+}
+
+.sat-name {
+  font-size: 0.75rem;
+  color: #e0e6ed;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sat-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 3px;
+}
+
+.sat-id {
+  font-size: 0.6rem;
+  color: #5a7a9a;
+}
+
+.sat-status-pulse {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.55rem;
+  color: #00e5ff;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.pulse-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #00e5ff;
+  box-shadow: 0 0 4px #00e5ff;
+  animation: pulse 1s infinite;
+}
+
+/* -- Satellite Badges -- */
+
+.sat-badge {
+  font-size: 0.55rem;
+  padding: 2px 6px;
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sat-badge.station {
+  background: rgba(0, 229, 255, 0.12);
+  color: #00e5ff;
+  border: 1px solid rgba(0, 229, 255, 0.25);
+}
+
+.sat-badge.gps {
+  background: rgba(0, 200, 83, 0.12);
+  color: #00c853;
+  border: 1px solid rgba(0, 200, 83, 0.25);
+}
+
+.sat-badge.weather {
+  background: rgba(255, 109, 0, 0.12);
+  color: #ff6d00;
+  border: 1px solid rgba(255, 109, 0, 0.25);
+}
+
+.sat-badge.starlink {
+  background: rgba(156, 163, 175, 0.12);
+  color: #9ca3af;
+  border: 1px solid rgba(156, 163, 175, 0.25);
+}
+
+.sat-badge.other {
+  background: rgba(156, 163, 175, 0.08);
+  color: #5a7a9a;
+  border: 1px solid rgba(156, 163, 175, 0.15);
+}
+
+/* ============================================================
+   LEGEND PANEL
+   ============================================================ */
+
+.legend-panel {
+  position: absolute;
+  bottom: 40px;
+  right: 348px;   /* 340px sidebar + 8px gap */
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  background: rgba(8, 18, 35, 0.85);
+  border: 1px solid rgba(0, 229, 255, 0.15);
+  border-radius: 4px;
+  padding: 10px 16px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  color: #5a7a9a;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.legend-dot.station {
+  background: #00e5ff;
+  box-shadow: 0 0 6px rgba(0, 229, 255, 0.5);
+}
+
+.legend-dot.gps {
+  background: #00c853;
+}
+
+.legend-dot.weather {
+  background: #ff6d00;
+}
+
+.legend-dot.starlink {
+  background: #9ca3af;
+}
+
+.legend-dot.other {
+  background: #5a7a9a;
+}
+
+/* ============================================================
+   FOOTER TEXT
+   ============================================================ */
+
+.footer-text {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  font-size: 0.65rem;
+  color: #5a7a9a;
+  letter-spacing: 0.05em;
+}
+
+/* ============================================================
+   LOADING OVERLAY
+   ============================================================ */
+
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  background: #050e1a;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 2px solid rgba(0, 229, 255, 0.1);
+  border-top-color: #00e5ff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-text {
+  font-size: 0.8rem;
+  color: #5a7a9a;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ============================================================
+   SELECTED SATELLITE LABEL
+   ============================================================ */
+
+.selected-label {
+  position: absolute;
+  top: 16px;
+  right: 348px;   /* 340px sidebar + 8px gap */
+  z-index: 10;
+  background: rgba(8, 18, 35, 0.85);
+  border: 1px solid rgba(0, 229, 255, 0.15);
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-size: 0.8rem;
+  color: #00e5ff;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* ============================================================
+   SELECTED SATELLITE DETAILS PANEL (LEFT SIDE)
+   ============================================================ */
+
+.details-panel {
+  position: absolute;
+  top: 96px; /* below the header-panel */
+  left: 16px;
+  width: 320px;
+  max-height: calc(100vh - 128px);
+  z-index: 10;
+  background: rgba(8, 18, 35, 0.9);
+  border: 1px solid var(--accent-color, rgba(0, 229, 255, 0.15));
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.6), inset 0 0 10px rgba(0, 229, 255, 0.03);
+  border-radius: 4px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(90, 122, 154, 0.3) transparent;
+}
+
+/* Custom scrollbar for webkit */
+.details-panel::-webkit-scrollbar {
+  width: 4px;
+}
+.details-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+.details-panel::-webkit-scrollbar-thumb {
+  background: rgba(90, 122, 154, 0.3);
+  border-radius: 2px;
+}
+
+.details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.details-title-area {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.details-subtitle {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.details-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #e0e6ed;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.details-close-btn {
+  background: transparent;
+  border: none;
+  color: #5a7a9a;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.details-close-btn:hover {
+  color: #e0e6ed;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.details-divider {
+  height: 1px;
+  background: rgba(0, 229, 255, 0.1);
+  margin: 4px 0;
+}
+
+.details-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #5a7a9a;
+  letter-spacing: 0.1em;
+}
+
+.section-icon {
+  color: var(--accent-color, #00e5ff);
+}
+
+/* Metrics Grid (Latitude, Longitude, Altitude, Speed) */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.metric-box {
+  background: rgba(10, 22, 40, 0.6);
+  border: 1px solid rgba(90, 122, 154, 0.15);
+  border-radius: 3px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.metric-label {
+  font-size: 0.55rem;
+  color: #5a7a9a;
+  letter-spacing: 0.05em;
+}
+
+.metric-value {
+  font-size: 0.75rem;
+  color: #e0e6ed;
+  font-weight: 700;
+}
+
+.metric-subval {
+  font-size: 0.6rem;
+  color: #5a7a9a;
+}
+
+.metric-loading {
+  font-size: 0.65rem;
+  color: #5a7a9a;
+  font-style: italic;
+  padding: 8px 0;
+}
+
+/* Keplerian Elements Table */
+.details-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.65rem;
+}
+
+.details-table td {
+  padding: 4px 0;
+  color: #5a7a9a;
+}
+
+.details-table tr td:last-child {
+  text-align: right;
+  color: #e0e6ed;
+}
+
+.details-table .value-highlight {
+  color: var(--accent-color, #00e5ff) !important;
+  font-weight: 700;
+}
+
+/* Numeric text font settings */
+.font-numeric {
+  font-variant-numeric: tabular-nums;
+}
+
+/* TLE Raw Data Block */
+.tle-toggle-btn {
+  background: transparent;
+  border: 1px solid rgba(90, 122, 154, 0.25);
+  border-radius: 3px;
+  color: #5a7a9a;
+  padding: 6px 10px;
+  font-size: 0.6rem;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  transition: all 0.2s ease;
+}
+
+.tle-toggle-btn:hover {
+  border-color: rgba(90, 122, 154, 0.5);
+  color: #e0e6ed;
+  background: rgba(90, 122, 154, 0.05);
+}
+
+.tle-raw-block {
+  background: rgba(5, 14, 26, 0.8);
+  border: 1px dashed rgba(90, 122, 154, 0.3);
+  border-radius: 3px;
+  padding: 8px;
+  margin-top: 4px;
+}
+
+.tle-raw-text {
+  font-size: 0.55rem;
+  color: #8fa0b3;
+  margin: 0;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
