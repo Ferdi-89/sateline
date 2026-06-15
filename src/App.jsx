@@ -1,9 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import MapView from './components/MapView';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Legend from './components/Legend';
 import SelectedSatellitePanel from './components/SelectedSatellitePanel';
+import TimeControls from './components/TimeControls';
+
+// Lazy-load CesiumMapView (heavy dependency ~30MB) only when user toggles to 3D
+const CesiumMapView = lazy(() => import('./components/CesiumMapView'));
 
 // CelesTrak groups to fetch, each tagged with a category
 const GROUPS = [
@@ -43,6 +47,38 @@ function App() {
   const [category, setCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState('2d'); // '2d' | '3d'
+  const [isCameraLocked, setIsCameraLocked] = useState(false);
+  
+  // Time Simulation State
+  const [isPaused, setIsPaused] = useState(false);
+  const [timeMultiplier, setTimeMultiplier] = useState(1);
+  const [simTime, setSimTime] = useState(new Date());
+
+  // 5Hz Simulated clock tick for UI updates (Header and Detail Panel)
+  useEffect(() => {
+    let lastTime = Date.now();
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const delta = now - lastTime;
+      lastTime = now;
+      if (!isPaused) {
+        setSimTime(prev => new Date(prev.getTime() + delta * timeMultiplier));
+      }
+    }, 200);
+    return () => clearInterval(interval);
+  }, [isPaused, timeMultiplier]);
+
+  const handleResetTime = () => {
+    setSimTime(new Date());
+    setTimeMultiplier(1);
+    setIsPaused(false);
+  };
+
+  // Reset camera lock when satellite selection changes
+  useEffect(() => {
+    setIsCameraLocked(false);
+  }, [selectedSatellite]);
 
   // Fetch multiple TLE groups in parallel and merge
   useEffect(() => {
@@ -106,19 +142,53 @@ function App() {
         </div>
       )}
 
-      {/* Full-screen map */}
+      {/* Full-screen map — 2D Canvas or 3D Cesium Globe */}
       <div className="map-area">
-        <MapView
-          satellites={allSatellites}
-          selectedSatellite={selectedSatellite}
-          onSelectSatellite={setSelectedSatellite}
-        />
+        {viewMode === '2d' ? (
+          <MapView
+            satellites={allSatellites}
+            selectedSatellite={selectedSatellite}
+            onSelectSatellite={setSelectedSatellite}
+            simTime={simTime}
+            isPaused={isPaused}
+            timeMultiplier={timeMultiplier}
+          />
+        ) : (
+          <Suspense fallback={
+            <div className="cesium-loading">
+              <div className="spinner"></div>
+              <p className="loading-text">Initializing 3D Globe...</p>
+            </div>
+          }>
+            <CesiumMapView
+              satellites={allSatellites}
+              selectedSatellite={selectedSatellite}
+              onSelectSatellite={setSelectedSatellite}
+              simTime={simTime}
+              isPaused={isPaused}
+              timeMultiplier={timeMultiplier}
+              isCameraLocked={isCameraLocked}
+            />
+          </Suspense>
+        )}
       </div>
+
+      {/* Time Controls (floating above map) */}
+      <TimeControls
+        isPaused={isPaused}
+        setIsPaused={setIsPaused}
+        timeMultiplier={timeMultiplier}
+        setTimeMultiplier={setTimeMultiplier}
+        onResetTime={handleResetTime}
+      />
 
       {/* Header panels */}
       <Header
         totalCount={allSatellites.length}
         selectedSatelliteName={selectedSatellite?.name || null}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        simTime={simTime}
       />
 
       {/* Left detail panel */}
@@ -126,6 +196,10 @@ function App() {
         <SelectedSatellitePanel
           satellite={selectedSatellite}
           onClose={() => setSelectedSatellite(null)}
+          simTime={simTime}
+          viewMode={viewMode}
+          isCameraLocked={isCameraLocked}
+          setIsCameraLocked={setIsCameraLocked}
         />
       )}
 

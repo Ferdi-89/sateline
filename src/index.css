@@ -530,12 +530,13 @@ canvas.map-area {
   right: 348px;   /* 340px sidebar + 8px gap */
   z-index: 10;
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px 20px;
+  flex-direction: column;
+  gap: 8px;
   background: rgba(8, 18, 35, 0.85);
   border: 1px solid rgba(0, 229, 255, 0.15);
   border-radius: 4px;
-  padding: 10px 16px;
+  padding: 10px 14px;
+  width: 170px;
 }
 
 .legend-item {
@@ -857,3 +858,267 @@ canvas.map-area {
   white-space: pre-wrap;
   word-break: break-all;
 }
+
+/* ============================================================
+   VIEW MODE TOGGLE (2D / 3D)
+   ============================================================ */
+
+.status-divider {
+  width: 1px;
+  height: 16px;
+  background: rgba(90, 122, 154, 0.35);
+}
+
+.view-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(10, 22, 40, 0.6);
+  border: 1px solid rgba(90, 122, 154, 0.3);
+  border-radius: 3px;
+  color: #8fa0b3;
+  padding: 4px 10px;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.view-toggle-btn:hover {
+  border-color: #00e5ff;
+  color: #e0e6ed;
+  background: rgba(0, 229, 255, 0.06);
+}
+
+.view-toggle-btn.active-3d {
+  background: rgba(0, 229, 255, 0.1);
+  border-color: #00e5ff;
+  color: #00e5ff;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.15);
+}
+
+/* ============================================================
+   CESIUM MAP AREA
+   ============================================================ */
+
+.cesium-map-area {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.cesium-loading {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  background: #050e1a;
+}
+
+/* ============================================================
+   CESIUM WIDGET OVERRIDES (hide default UI, match dark theme)
+   ============================================================ */
+
+.cesium-viewer {
+  font-family: 'Space Mono', monospace !important;
+}
+
+.cesium-viewer-bottom {
+  display: none !important;
+}
+
+.cesium-viewer .cesium-widget-credits {
+  display: none !important;
+}
+
+.cesium-viewer .cesium-viewer-toolbar {
+  display: none !important;
+}
+
+.cesium-widget canvas {
+  outline: none;
+}
+
+/* ============================================================
+   TIME CONTROLS PANEL (Sim Controls HUD)
+   ============================================================ */
+
+.time-controls-panel {
+  position: absolute;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(8, 18, 35, 0.85);
+  border: 1px solid rgba(0, 229, 255, 0.15);
+  border-radius: 4px;
+  padding: 6px 12px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  transition: all 0.3s ease;
+}
+
+.time-controls-panel:hover {
+  border-color: rgba(0, 229, 255, 0.35);
+  box-shadow: 0 4px 25px rgba(0, 229, 255, 0.08);
+}
+
+.time-controls-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.time-control-btn {
+  background: rgba(10, 22, 40, 0.6);
+  border: 1px solid rgba(90, 122, 154, 0.3);
+  border-radius: 3px;
+  color: #8fa0b3;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.time-control-btn:hover {
+  border-color: #00e5ff;
+  color: #00e5ff;
+  background: rgba(0, 229, 255, 0.06);
+}
+
+.time-control-btn.play-pause-btn.playing {
+  color: #00e5ff;
+  border-color: #00e5ff;
+  background: rgba(0, 229, 255, 0.05);
+}
+
+.time-control-btn.play-pause-btn.paused {
+  color: #ff6d00;
+  border-color: rgba(255, 109, 0, 0.5);
+}
+
+.time-control-btn.play-pause-btn.paused:hover {
+  border-color: #ff6d00;
+  background: rgba(255, 109, 0, 0.06);
+}
+
+.time-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(90, 122, 154, 0.3);
+}
+
+.time-speeds {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.speed-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: #5a7a9a;
+  padding: 3px 6px;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.speed-btn:hover {
+  color: #e0e6ed;
+}
+
+.speed-btn.active {
+  border-color: rgba(0, 229, 255, 0.35);
+  background: rgba(0, 229, 255, 0.08);
+  color: #00e5ff;
+}
+
+/* ============================================================
+   TELEMETRY SPARKLINE (Altitude History Chart)
+   ============================================================ */
+
+.telemetry-sparkline-container {
+  background: rgba(5, 14, 26, 0.6);
+  border: 1px solid rgba(90, 122, 154, 0.15);
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-top: 10px;
+}
+
+.sparkline-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.6rem;
+  color: #5a7a9a;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.sparkline-header span:nth-child(2) {
+  flex-grow: 1;
+}
+
+.sparkline-stats {
+  color: #00e5ff;
+}
+
+.sparkline-canvas {
+  width: 100%;
+  height: 50px;
+  display: block;
+  background: rgba(3, 8, 16, 0.4);
+  border-radius: 2px;
+  box-sizing: border-box;
+}
+
+/* ============================================================
+   CAMERA LOCK BUTTON
+   ============================================================ */
+
+.camera-lock-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  background: rgba(10, 22, 40, 0.6);
+  border: 1px solid rgba(90, 122, 154, 0.3);
+  border-radius: 3px;
+  color: #8fa0b3;
+  padding: 4px 8px;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  width: max-content;
+}
+
+.camera-lock-btn:hover {
+  border-color: #00e5ff;
+  color: #e0e6ed;
+  background: rgba(0, 229, 255, 0.06);
+}
+
+.camera-lock-btn.active {
+  background: rgba(0, 229, 255, 0.1);
+  border-color: #00e5ff;
+  color: #00e5ff;
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.12);
+}
+
+

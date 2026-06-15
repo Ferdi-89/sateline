@@ -16,8 +16,6 @@ const FRAME_MS   = 1000 / FPS;
 const GEO_URL    = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
 /* ─── Equirectangular projection ─────────────────────────── */
-// lng ∈ [-180,180] → x ∈ [offsetX, offsetX + mapW]
-// lat ∈ [-90,90]   → y ∈ [offsetY + mapH, offsetY]  (inverted: north is up)
 function project(lng, lat, mapW, mapH, offsetX = 0, offsetY = 0) {
   const x = ((lng + 180) / 360) * mapW + offsetX;
   const y = ((90 - lat) / 180) * mapH + offsetY;
@@ -25,8 +23,6 @@ function project(lng, lat, mapW, mapH, offsetX = 0, offsetY = 0) {
 }
 
 /* ─── Split a ring at antimeridian crossings ─────────────── */
-// Returns array of sub-rings. Consecutive coords that differ by
-// more than 180° in longitude indicate an antimeridian crossing.
 function splitRingAtAntimeridian(ring) {
   if (ring.length < 2) return [ring];
   const segments = [[]];
@@ -36,7 +32,7 @@ function splitRingAtAntimeridian(ring) {
     if (i < ring.length - 1) {
       const next = ring[i + 1];
       if (Math.abs(next[0] - cur[0]) > 180) {
-        segments.push([]); // start new segment
+        segments.push([]);
       }
     }
   }
@@ -46,7 +42,7 @@ function splitRingAtAntimeridian(ring) {
 /* ─── Build canvas path array from topojson ─────────────── */
 function buildCountrySegments(topoData, mapW, mapH, offsetX, offsetY) {
   const countries = feature(topoData, topoData.objects.countries);
-  const allSegments = []; // each entry = array of [x,y] points (one closed sub-polygon)
+  const allSegments = [];
 
   countries.features.forEach(feat => {
     try {
@@ -58,15 +54,23 @@ function buildCountrySegments(topoData, mapW, mapH, offsetX, offsetY) {
             Math.max(-85,  Math.min(85,  lat)),
           ]);
           const subRings = splitRingAtAntimeridian(clampedRing);
-          subRings.forEach(sub => {
-            if (sub.length < 2) return;
-            allSegments.push(sub.map(([lng, lat]) => project(lng, lat, mapW, mapH, offsetX, offsetY)));
+          subRings.forEach(sr => {
+            const projectedRing = sr.map(([lng, lat]) => 
+              project(lng, lat, mapW, mapH, offsetX, offsetY)
+            );
+            allSegments.push(projectedRing);
           });
         });
       };
-      if (geom.type === 'Polygon')      processPolygon(geom.coordinates);
-      if (geom.type === 'MultiPolygon') geom.coordinates.forEach(processPolygon);
-    } catch { /* skip */ }
+
+      if (geom.type === 'Polygon') {
+        processPolygon(geom.coordinates);
+      } else if (geom.type === 'MultiPolygon') {
+        geom.coordinates.forEach(poly => processPolygon(poly));
+      }
+    } catch {
+      // Skip failed features
+    }
   });
 
   return allSegments;
@@ -93,7 +97,11 @@ function computeOrbit(satrec, now, mapW, mapH, offsetX, offsetY) {
   for (let m = -90; m <= 90; m += 0.5) {
     const t = new Date(now.getTime() + m * 60_000);
     const pos = getSatPosition(satrec, t, mapW, mapH, offsetX, offsetY);
-    if (!pos) { if (segments[segments.length-1].length) segments.push([]); prevLng = null; continue; }
+    if (!pos) { 
+      if (segments[segments.length-1].length) segments.push([]); 
+      prevLng = null; 
+      continue; 
+    }
     if (prevLng !== null && Math.abs(pos.lng - prevLng) > 180) segments.push([]);
     segments[segments.length - 1].push(pos.xy);
     prevLng = pos.lng;
@@ -104,7 +112,14 @@ function computeOrbit(satrec, now, mapW, mapH, offsetX, offsetY) {
 /* ══════════════════════════════════════════════════════════
    MapView — Canvas-based, useRef loop, no setState in loop
    ══════════════════════════════════════════════════════════ */
-export default function MapView({ satellites, selectedSatellite, onSelectSatellite }) {
+export default function MapView({ 
+  satellites, 
+  selectedSatellite, 
+  onSelectSatellite,
+  simTime,
+  isPaused,
+  timeMultiplier,
+}) {
   const canvasRef      = useRef(null);
   const topoDataRef    = useRef(null);
   const segmentsRef    = useRef([]);
@@ -116,10 +131,21 @@ export default function MapView({ satellites, selectedSatellite, onSelectSatelli
   const satrecCache    = useRef(new Map());
   const sizeRef        = useRef({ W: 0, H: 0, mapW: 0, mapH: 0, offsetX: 0, offsetY: 0 });
 
-  // Zoom / pan transform — stored in ref so RAF loop never re-triggers
+  // Refs for tracking simulation time
+  const simTimeRef = useRef(simTime);
+  const isPausedRef = useRef(isPaused);
+  const timeMultiplierRef = useRef(timeMultiplier);
+  const localSimTimeRef = useRef(new Date(simTime));
+
+  // Zoom / pan transform
   const xfRef  = useRef({ scale: 1, tx: 0, ty: 0 });
-  const dragRef = useRef(null); // { startX, startY, startTx, startTy }
+  const dragRef = useRef(null);
   const isDraggingRef = useRef(false);
+
+  useEffect(() => { selectedRef.current = selectedSatellite; }, [selectedSatellite]);
+  useEffect(() => { simTimeRef.current = simTime; }, [simTime]);
+  useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
+  useEffect(() => { timeMultiplierRef.current = timeMultiplier; }, [timeMultiplier]);
 
   /* ── Helper: rebuild country segments for current canvas size ── */
   const rebuildSegments = useCallback(() => {
@@ -127,7 +153,6 @@ export default function MapView({ satellites, selectedSatellite, onSelectSatelli
     if (!topoDataRef.current || !canvas || canvas.width === 0) return;
     const { width: W, height: H } = canvas;
     
-    // Maintain strict 2:1 aspect ratio centered in canvas to prevent deformation
     let mapW = W;
     let mapH = W / 2;
     let offsetX = 0;
@@ -180,13 +205,34 @@ export default function MapView({ satellites, selectedSatellite, onSelectSatelli
     const canvas = canvasRef.current;
     if (satrec && canvas) {
       const { mapW, mapH, offsetX, offsetY } = sizeRef.current;
-      orbitRef.current = computeOrbit(satrec, new Date(), mapW, mapH, offsetX, offsetY);
+      orbitRef.current = computeOrbit(satrec, localSimTimeRef.current, mapW, mapH, offsetX, offsetY);
     }
   }, [selectedSatellite]);
 
   /* ── Main draw loop ─────────────────────────────────────── */
   const draw = useCallback((ts) => {
     rafRef.current = requestAnimationFrame(draw);
+
+    // Calculate time delta for simulated time
+    const nowReal = performance.now();
+    const lastRealTime = lastFrameRef.current || nowReal;
+    const deltaReal = nowReal - lastRealTime;
+
+    let localSimTime;
+    if (isPausedRef.current) {
+      localSimTime = new Date(simTimeRef.current);
+    } else if (timeMultiplierRef.current === 1) {
+      localSimTime = new Date();
+    } else {
+      localSimTime = new Date(localSimTimeRef.current.getTime() + deltaReal * timeMultiplierRef.current);
+      const targetTime = simTimeRef.current;
+      if (Math.abs(localSimTime.getTime() - targetTime.getTime()) > 5000 * timeMultiplierRef.current) {
+        localSimTime = new Date(targetTime);
+      }
+    }
+    localSimTimeRef.current = localSimTime;
+
+    // Frame rate check
     if (ts - lastFrameRef.current < FRAME_MS) return;
     lastFrameRef.current = ts;
 
@@ -194,16 +240,15 @@ export default function MapView({ satellites, selectedSatellite, onSelectSatelli
     if (!canvas || canvas.width === 0) return;
     const ctx     = canvas.getContext('2d');
     const { W, H, mapW, mapH, offsetX, offsetY } = sizeRef.current;
-    const now     = new Date();
     const sel     = selectedRef.current;
     const { scale, tx, ty } = xfRef.current;
 
-    /* 1 — Clear (reset transform first) */
+    /* 1 — Clear */
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#050e1a';
     ctx.fillRect(0, 0, W, H);
 
-    /* Apply zoom/pan transform for all world drawing */
+    /* Apply zoom/pan transform */
     ctx.setTransform(scale, 0, 0, scale, tx, ty);
 
     /* 2 — Grid lines & Border */
@@ -224,7 +269,6 @@ export default function MapView({ satellites, selectedSatellite, onSelectSatelli
       ctx.stroke();
     });
 
-    // Subtle tactical border around the map boundaries
     ctx.strokeStyle = 'rgba(0, 229, 255, 0.25)';
     ctx.lineWidth   = 1;
     ctx.strokeRect(offsetX, offsetY, mapW, mapH);
@@ -251,7 +295,6 @@ export default function MapView({ satellites, selectedSatellite, onSelectSatelli
 
       segments.forEach((seg, segIdx) => {
         if (seg.length < 2) return;
-        // Past orbit = dimmer, Future orbit = brighter
         const isPast = segIdx < half;
         ctx.beginPath();
         ctx.moveTo(seg[0][0], seg[0][1]);
@@ -269,24 +312,77 @@ export default function MapView({ satellites, selectedSatellite, onSelectSatelli
       ctx.shadowColor = 'transparent';
     }
 
-    /* 5 — Satellite dots */
+    /* 5 — Signal footprint (Coverage Cone) */
+    if (sel) {
+      const key = sel.tle1 + sel.tle2;
+      const cache = satrecCache.current;
+      const satrec = cache.get(key);
+      if (satrec) {
+        const pos = getSatPosition(satrec, localSimTime, mapW, mapH, offsetX, offsetY);
+        if (pos) {
+          const [cx, cy] = pos.xy;
+          const R_earth = 6371; // Earth radius in km
+          const theta = Math.acos(R_earth / (R_earth + pos.alt));
+          const thetaDeg = theta * 180 / Math.PI;
+          const footprintPx = (thetaDeg / 360) * mapW;
+
+          const drawFootprintAt = (x) => {
+            // Fill
+            ctx.beginPath();
+            ctx.arc(x, cy, footprintPx, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(0, 229, 255, 0.04)';
+            ctx.fill();
+
+            // Outer outline
+            ctx.beginPath();
+            ctx.arc(x, cy, footprintPx, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(0, 229, 255, 0.7)';
+            ctx.lineWidth = 1.5 / scale;
+            ctx.stroke();
+
+            // Inner outline (50% radius)
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(x, cy, footprintPx * 0.5, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(0, 229, 255, 0.35)';
+            ctx.lineWidth = 1.0 / scale;
+            ctx.setLineDash([4 / scale, 4 / scale]);
+            ctx.stroke();
+            ctx.restore();
+
+            // Center dot
+            ctx.beginPath();
+            ctx.arc(x, cy, 2 / scale, 0, Math.PI * 2);
+            ctx.fillStyle = '#00e5ff';
+            ctx.fill();
+          };
+
+          drawFootprintAt(cx);
+          // Handle wrapping
+          if (cx - footprintPx < offsetX) {
+            drawFootprintAt(cx + mapW);
+          }
+          if (cx + footprintPx > offsetX + mapW) {
+            drawFootprintAt(cx - mapW);
+          }
+        }
+      }
+    }
+
+    /* 6 — Satellite dots */
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform to screen space
     
-    // Scale multiplier: scales sub-linearly with zoom level so dots grow when zoomed in,
-    // but don't overwhelm the map. Clamped between 0.75x and 3.5x.
     const sizeMul = Math.max(0.75, Math.min(3.5, Math.sqrt(scale)));
     
     satsRef.current.forEach(sat => {
-      const pos = getSatPosition(sat.satrec, now, mapW, mapH, offsetX, offsetY);
+      const pos = getSatPosition(sat.satrec, localSimTime, mapW, mapH, offsetX, offsetY);
       if (!pos) return;
       const [x, y] = pos.xy;
       
-      // Calculate screen position
       const sx = x * scale + tx;
       const sy = y * scale + ty;
 
-      // Filter by screen bounds (with padding)
       if (sx < -20 || sx > W + 20 || sy < -20 || sy > H + 20) return;
 
       const isSel  = sel && sel.name === sat.name && sel.tle1 === sat.tle1;
@@ -294,7 +390,6 @@ export default function MapView({ satellites, selectedSatellite, onSelectSatelli
       const baseR  = (DOT_RADIUS[sat.category] || 3) + (isSel ? 2 : 0);
       const r      = baseR * sizeMul;
 
-      /* selected rings */
       if (isSel) {
         ctx.beginPath(); ctx.arc(sx, sy, r + 8 * sizeMul, 0, Math.PI * 2);
         ctx.strokeStyle = color + '30'; ctx.lineWidth = 1.5 * sizeMul; ctx.stroke();
@@ -302,7 +397,6 @@ export default function MapView({ satellites, selectedSatellite, onSelectSatelli
         ctx.strokeStyle = color + '60'; ctx.lineWidth = 1 * sizeMul;   ctx.stroke();
       }
 
-      /* glow */
       if (sat.category === 'station' || isSel) {
         ctx.shadowColor = color;
         ctx.shadowBlur  = (isSel ? 14 : 7) * sizeMul;
@@ -310,7 +404,6 @@ export default function MapView({ satellites, selectedSatellite, onSelectSatelli
         ctx.shadowBlur  = 0;
       }
 
-      /* dot */
       ctx.beginPath();
       ctx.arc(sx, sy, r, 0, Math.PI * 2);
       ctx.fillStyle   = color;
@@ -345,7 +438,7 @@ export default function MapView({ satellites, selectedSatellite, onSelectSatelli
     };
     const ro = new ResizeObserver(onResize);
     ro.observe(canvas);
-    onResize(); // immediate initial size
+    onResize();
     return () => ro.disconnect();
   }, [rebuildSegments]);
 
@@ -361,7 +454,6 @@ export default function MapView({ satellites, selectedSatellite, onSelectSatelli
       const { scale, tx, ty } = xfRef.current;
       const factor  = e.deltaY < 0 ? 1.15 : 1 / 1.15;
       const newScale = Math.min(20, Math.max(0.5, scale * factor));
-      // Zoom centered on cursor position
       xfRef.current = {
         scale: newScale,
         tx: mouseX - (mouseX - tx) * (newScale / scale),
@@ -378,7 +470,7 @@ export default function MapView({ satellites, selectedSatellite, onSelectSatelli
     if (!canvas) return;
     const onMouseDown = (e) => {
       if (e.button !== 0) return;
-      isDraggingRef.current = false;
+      isDraggingRef.current = true;
       dragRef.current = {
         startX: e.clientX,
         startY: e.clientY,
@@ -387,21 +479,24 @@ export default function MapView({ satellites, selectedSatellite, onSelectSatelli
       };
     };
     const onMouseMove = (e) => {
-      if (!dragRef.current) return;
+      if (!isDraggingRef.current || !dragRef.current) return;
       const dx = e.clientX - dragRef.current.startX;
       const dy = e.clientY - dragRef.current.startY;
-      if (Math.hypot(dx, dy) > 3) isDraggingRef.current = true;
-      if (!isDraggingRef.current) return;
       xfRef.current = {
         ...xfRef.current,
         tx: dragRef.current.startTx + dx,
         ty: dragRef.current.startTy + dy,
       };
     };
-    const onMouseUp = () => { dragRef.current = null; };
+    const onMouseUp = () => {
+      isDraggingRef.current = false;
+      dragRef.current = null;
+    };
+
     canvas.addEventListener('mousedown', onMouseDown);
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
+
     return () => {
       canvas.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('mousemove', onMouseMove);
@@ -409,49 +504,63 @@ export default function MapView({ satellites, selectedSatellite, onSelectSatelli
     };
   }, []);
 
-  /* ── Double-click: reset zoom ───────────────────────────── */
-  const handleDblClick = useCallback(() => {
-    xfRef.current = { scale: 1, tx: 0, ty: 0 };
-  }, []);
-
-  /* ── Click: pick nearest satellite ─────────────────────── */
-  const handleClick = useCallback(e => {
-    // Ignore clicks that were actually drags
-    if (isDraggingRef.current) { isDraggingRef.current = false; return; }
+  /* ── Click Picking: Select nearest satellite ────────────── */
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const rect   = canvas.getBoundingClientRect();
-    const scaleX = canvas.width  / rect.width;
-    const scaleY = canvas.height / rect.height;
-    // Screen → canvas pixels
-    const cx = (e.clientX - rect.left) * scaleX;
-    const cy = (e.clientY - rect.top)  * scaleY;
-    // Canvas pixels → world coords (inverse transform)
-    const { scale, tx, ty } = xfRef.current;
-    const wx = (cx - tx) / scale;
-    const wy = (cy - ty) / scale;
-    const { mapW, mapH, offsetX, offsetY } = sizeRef.current;
-    const now = new Date();
+    const onClick = (e) => {
+      // Skip clicks that were actually drags
+      if (Math.abs(xfRef.current.tx - (dragRef.current?.startTx ?? xfRef.current.tx)) > 2 ||
+          Math.abs(xfRef.current.ty - (dragRef.current?.startTy ?? xfRef.current.ty)) > 2) {
+        return;
+      }
+      const rect = canvas.getBoundingClientRect();
+      const clickX = (e.clientX - rect.left) * (canvas.width  / rect.width);
+      const clickY = (e.clientY - rect.top)  * (canvas.height / rect.height);
 
-    let closest = null, minDist = 20 / scale; // threshold scales with zoom
-    satsRef.current.forEach(sat => {
-      const pos = getSatPosition(sat.satrec, now, mapW, mapH, offsetX, offsetY);
-      if (!pos) return;
-      const d = Math.hypot(wx - pos.xy[0], wy - pos.xy[1]);
-      if (d < minDist) { minDist = d; closest = sat; }
-    });
-    onSelectSatellite(closest ?? null);
+      const { scale, tx, ty } = xfRef.current;
+      const { mapW, mapH, offsetX, offsetY } = sizeRef.current;
+
+      let nearestSat = null;
+      let minDist = 15; // click range
+
+      satsRef.current.forEach(sat => {
+        const pos = getSatPosition(sat.satrec, localSimTimeRef.current, mapW, mapH, offsetX, offsetY);
+        if (!pos) return;
+        const [x, y] = pos.xy;
+        const sx = x * scale + tx;
+        const sy = y * scale + ty;
+        const dist = Math.hypot(clickX - sx, clickY - sy);
+        if (dist < minDist) {
+          minDist = dist;
+          nearestSat = sat;
+        }
+      });
+
+      if (nearestSat) {
+        onSelectSatellite({
+          name: nearestSat.name,
+          tle1: nearestSat.tle1,
+          tle2: nearestSat.tle2,
+          category: nearestSat.category,
+        });
+      } else {
+        onSelectSatellite(null);
+      }
+    };
+
+    canvas.addEventListener('click', onClick);
+    return () => canvas.removeEventListener('click', onClick);
   }, [onSelectSatellite]);
 
   return (
     <canvas
       ref={canvasRef}
-      className="map-area"
-      onClick={handleClick}
-      onDoubleClick={handleDblClick}
       style={{
-        cursor: dragRef.current ? 'grabbing' : 'crosshair',
+        width: '100%',
+        height: '100%',
         display: 'block',
+        cursor: 'crosshair',
       }}
     />
   );

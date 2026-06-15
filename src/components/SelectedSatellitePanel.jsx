@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import * as satellite from 'satellite.js';
-import { X, Globe, Compass, Code, Info, Navigation, Radio } from 'lucide-react';
+import { X, Globe, Compass, Code, Activity, Target } from 'lucide-react';
 
 const CATEGORY_COLORS = {
   station:  '#00e5ff',
@@ -18,7 +18,6 @@ const CATEGORY_LABELS = {
   other:    'GENERAL SATELLITE',
 };
 
-// Helper to parse Keplerian details from TLE lines
 function parseTLEDetails(tle1, tle2) {
   try {
     const noradId = tle1.substring(2, 7).trim();
@@ -33,7 +32,6 @@ function parseTLEDetails(tle1, tle2) {
     const meanAnomaly = parseFloat(tle2.substring(43, 51).trim());
     const meanMotion = parseFloat(tle2.substring(52, 63).trim());
 
-    // Period: 1440 minutes / mean motion
     const periodMinutes = meanMotion > 0 ? (1440 / meanMotion) : 0;
     const periodStr = periodMinutes > 0 
       ? `${Math.floor(periodMinutes)}m ${Math.round((periodMinutes % 1) * 60)}s`
@@ -55,7 +53,6 @@ function parseTLEDetails(tle1, tle2) {
   }
 }
 
-// Helper to parse Launch info from International Designator
 function parseLaunchInfo(intDesg) {
   if (!intDesg || intDesg.length < 5) return 'N/A';
   try {
@@ -72,57 +69,148 @@ function parseLaunchInfo(intDesg) {
   }
 }
 
-export default function SelectedSatellitePanel({ satellite: sat, onClose }) {
-  const [liveProps, setLiveProps] = useState(null);
+export default function SelectedSatellitePanel({ 
+  satellite: sat, 
+  onClose, 
+  simTime,
+  viewMode,
+  isCameraLocked,
+  setIsCameraLocked,
+}) {
   const [showTle, setShowTle] = useState(false);
+  const canvasRef = useRef(null);
+  const historyRef = useRef([]); // holds { time, alt }
+  const prevSatRef = useRef(null);
 
+  // Reset history if satellite changes
+  if (prevSatRef.current !== sat) {
+    historyRef.current = [];
+    prevSatRef.current = sat;
+  }
+
+  // Calculate live telemetry metrics using current simulated time
+  let liveProps = null;
+  let rawAlt = 0;
+
+  try {
+    const satrec = satellite.twoline2satrec(sat.tle1, sat.tle2);
+    const pv = satellite.propagate(satrec, simTime);
+    if (pv && pv.position && pv.velocity) {
+      const gmst = satellite.gstime(simTime);
+      const gd   = satellite.eciToGeodetic(pv.position, gmst);
+      
+      const lat = satellite.degreesLat(gd.latitude);
+      const lng = satellite.degreesLong(gd.longitude);
+      rawAlt = gd.height; // in km
+      
+      const speedKmS = Math.hypot(pv.velocity.x, pv.velocity.y, pv.velocity.z);
+      const speedKmH = speedKmS * 3600;
+      
+      liveProps = {
+        lat: lat.toFixed(5) + '°',
+        lng: lng.toFixed(5) + '°',
+        alt: rawAlt.toFixed(2) + ' km',
+        speed: speedKmH.toFixed(1).replace(/\B(?=(\d{3})+(?!\d))/g, ",") + ' km/h',
+        speedSec: speedKmS.toFixed(3) + ' km/s',
+      };
+    }
+  } catch (err) {
+    // Ignore propagation errors
+  }
+
+  // Record history point for sparkline
   useEffect(() => {
-    if (!sat) return;
-    
-    let active = true;
-    let satrec;
-    try {
-      satrec = satellite.twoline2satrec(sat.tle1, sat.tle2);
-    } catch {
-      return;
+    if (liveProps && rawAlt > 0) {
+      const history = historyRef.current;
+      history.push(rawAlt);
+      if (history.length > 40) {
+        history.shift();
+      }
+      drawSparkline();
+    }
+  }, [simTime, sat]);
+
+  // Draw the telemetry sparkline graph
+  const drawSparkline = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const history = historyRef.current;
+    if (history.length < 2) return;
+
+    const W = canvas.width;
+    const H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    // Grid lines
+    ctx.strokeStyle = 'rgba(90, 122, 154, 0.08)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < W; x += 30) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, H);
+      ctx.stroke();
+    }
+    for (let y = 0; y < H; y += 15) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(W, y);
+      ctx.stroke();
     }
 
-    const updateLiveMetrics = () => {
-      if (!active) return;
-      const now = new Date();
-      try {
-        const pv = satellite.propagate(satrec, now);
-        if (pv && pv.position && pv.velocity) {
-          const gmst = satellite.gstime(now);
-          const gd   = satellite.eciToGeodetic(pv.position, gmst);
-          
-          const lat = satellite.degreesLat(gd.longitude);
-          const lng = satellite.degreesLong(gd.latitude);
-          const alt = gd.height; // in km
-          
-          const speedKmS = Math.hypot(pv.velocity.x, pv.velocity.y, pv.velocity.z);
-          const speedKmH = speedKmS * 3600;
-          
-          setLiveProps({
-            lat: lat.toFixed(5) + '°',
-            lng: lng.toFixed(5) + '°',
-            alt: alt.toFixed(2) + ' km',
-            speed: speedKmH.toFixed(1).replace(/\B(?=(\d{3})+(?!\d))/g, ",") + ' km/h',
-            speedSec: speedKmS.toFixed(3) + ' km/s',
-          });
-        }
-      } catch (err) {
-        // Fallback or ignore
-      }
-      // Update at 5Hz for smooth real-time telemetry feel
-      setTimeout(updateLiveMetrics, 200);
-    };
+    // Min and Max values for scale
+    const minVal = Math.min(...history);
+    const maxVal = Math.max(...history);
+    const range = maxVal - minVal || 10;
+    const pad = range * 0.1; // 10% padding top/bottom
 
-    updateLiveMetrics();
-    return () => { active = false; };
-  }, [sat]);
+    const getX = (index) => (index / (history.length - 1)) * W;
+    const getY = (val) => H - 4 - ((val - (minVal - pad)) / (range + 2 * pad)) * (H - 8);
 
-  if (!sat) return null;
+    // Accent color from category
+    const accentColor = CATEGORY_COLORS[sat.category] || CATEGORY_COLORS.other;
+
+    // Draw area gradient
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, accentColor + '30');
+    grad.addColorStop(1, accentColor + '00');
+
+    ctx.beginPath();
+    ctx.moveTo(getX(0), H);
+    for (let i = 0; i < history.length; i++) {
+      ctx.lineTo(getX(i), getY(history[i]));
+    }
+    ctx.lineTo(getX(history.length - 1), H);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Draw line
+    ctx.beginPath();
+    ctx.moveTo(getX(0), getY(history[0]));
+    for (let i = 1; i < history.length; i++) {
+      ctx.lineTo(getX(i), getY(history[i]));
+    }
+    ctx.strokeStyle = accentColor;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Draw dynamic pulse dot at the latest point
+    const lastIdx = history.length - 1;
+    const dotX = getX(lastIdx);
+    const dotY = getY(history[lastIdx]);
+
+    ctx.beginPath();
+    ctx.arc(dotX, dotY, 3, 0, 2 * Math.PI);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(dotX, dotY, 6, 0, 2 * Math.PI);
+    ctx.strokeStyle = accentColor + '88';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  };
 
   const color = CATEGORY_COLORS[sat.category] || CATEGORY_COLORS.other;
   const kep = parseTLEDetails(sat.tle1, sat.tle2);
@@ -137,6 +225,16 @@ export default function SelectedSatellitePanel({ satellite: sat, onClose }) {
             {CATEGORY_LABELS[sat.category] || 'SATELLITE'}
           </span>
           <h2 className="details-title" title={sat.name}>{sat.name}</h2>
+          {viewMode === '3d' && (
+            <button
+              className={`camera-lock-btn ${isCameraLocked ? 'active' : ''}`}
+              onClick={() => setIsCameraLocked(!isCameraLocked)}
+              title={isCameraLocked ? 'Release camera tracking lock' : 'Lock camera onto satellite'}
+            >
+              <Target size={11} />
+              <span>{isCameraLocked ? 'CAMERA: LOCKED' : 'LOCK CAMERA'}</span>
+            </button>
+          )}
         </div>
         <button className="details-close-btn" onClick={onClose} title="Deselect satellite">
           <X size={16} />
@@ -152,25 +250,44 @@ export default function SelectedSatellitePanel({ satellite: sat, onClose }) {
           REAL-TIME TELEMETRY
         </h3>
         {liveProps ? (
-          <div className="metrics-grid">
-            <div className="metric-box">
-              <span className="metric-label">LATITUDE</span>
-              <span className="metric-value font-numeric">{liveProps.lat}</span>
+          <>
+            <div className="metrics-grid">
+              <div className="metric-box">
+                <span className="metric-label">LATITUDE</span>
+                <span className="metric-value font-numeric">{liveProps.lat}</span>
+              </div>
+              <div className="metric-box">
+                <span className="metric-label">LONGITUDE</span>
+                <span className="metric-value font-numeric">{liveProps.lng}</span>
+              </div>
+              <div className="metric-box">
+                <span className="metric-label">ALTITUDE</span>
+                <span className="metric-value font-numeric">{liveProps.alt}</span>
+              </div>
+              <div className="metric-box">
+                <span className="metric-label">VELOCITY</span>
+                <span className="metric-value font-numeric">{liveProps.speed}</span>
+                <span className="metric-subval">{liveProps.speedSec}</span>
+              </div>
             </div>
-            <div className="metric-box">
-              <span className="metric-label">LONGITUDE</span>
-              <span className="metric-value font-numeric">{liveProps.lng}</span>
+
+            {/* Canvas Sparkline */}
+            <div className="telemetry-sparkline-container">
+              <div className="sparkline-header">
+                <Activity size={10} style={{ color: color }} />
+                <span>ALTITUDE HISTORY WAVE</span>
+                <span className="sparkline-stats font-numeric">
+                  {rawAlt.toFixed(1)} km
+                </span>
+              </div>
+              <canvas 
+                ref={canvasRef} 
+                width={250} 
+                height={50} 
+                className="sparkline-canvas"
+              />
             </div>
-            <div className="metric-box">
-              <span className="metric-label">ALTITUDE</span>
-              <span className="metric-value font-numeric">{liveProps.alt}</span>
-            </div>
-            <div className="metric-box">
-              <span className="metric-label">VELOCITY</span>
-              <span className="metric-value font-numeric">{liveProps.speed}</span>
-              <span className="metric-subval">{liveProps.speedSec}</span>
-            </div>
-          </div>
+          </>
         ) : (
           <p className="metric-loading">Recalculating orbital coordinates...</p>
         )}

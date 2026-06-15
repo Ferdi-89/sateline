@@ -1,19 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { Globe, Map } from 'lucide-react';
 
-function Header({ totalCount, selectedSatelliteName }) {
-  const [utc, setUtc] = useState('');
-
-  useEffect(() => {
-    const tick = () => {
-      const now = new Date();
-      setUtc(
-        now.toISOString().slice(11, 19) + ' UTC'
-      );
-    };
-    tick();
-    const timer = setInterval(tick, 1000);
-    return () => clearInterval(timer);
-  }, []);
+function Header({ totalCount, selectedSatelliteName, viewMode, setViewMode, simTime }) {
+  const utc = simTime ? simTime.toISOString().slice(11, 19) + ' UTC' : 'N/A';
 
   return (
     <>
@@ -37,6 +26,26 @@ function Header({ totalCount, selectedSatelliteName }) {
           <span className="status-label">UTC:</span>
           <span className="status-value">{utc}</span>
         </span>
+
+        {/* View mode toggle */}
+        <span className="status-divider"></span>
+        <button
+          className={`view-toggle-btn ${viewMode === '3d' ? 'active-3d' : ''}`}
+          onClick={() => setViewMode(viewMode === '2d' ? '3d' : '2d')}
+          title={viewMode === '2d' ? 'Switch to 3D Globe (Cesium)' : 'Switch to 2D Map'}
+        >
+          {viewMode === '2d' ? (
+            <>
+              <Globe size={14} />
+              <span>3D</span>
+            </>
+          ) : (
+            <>
+              <Map size={14} />
+              <span>2D</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* Selected satellite label (top-right, before sidebar) */}
