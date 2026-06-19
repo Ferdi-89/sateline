@@ -71,6 +71,69 @@ function parseLaunchInfo(intDesg) {
 
 import { useMemo } from 'react';
 
+function getElevationRating(elev) {
+  if (elev >= 45) return { text: 'Tinggi / High', color: '#00e5ff' };
+  if (elev >= 25) return { text: 'Sedang / Med', color: '#ffea00' };
+  return { text: 'Rendah / Low', color: '#8fa0b5' };
+}
+
+function getPassDateLabel(riseTime, simTime) {
+  const simDate = new Date(simTime);
+  const passDate = new Date(riseTime);
+  
+  const simDay = new Date(simDate.getFullYear(), simDate.getMonth(), simDate.getDate());
+  const passDay = new Date(passDate.getFullYear(), passDate.getMonth(), passDate.getDate());
+  
+  const diffTime = passDay.getTime() - simDay.getTime();
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) return 'Hari ini / Today';
+  if (diffDays === 1) return 'Besok / Tomorrow';
+  return passDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+function getPassStatus(riseTime, setTime, simTime) {
+  const nowMs = simTime.getTime();
+  const riseMs = riseTime.getTime();
+  const setMs = setTime.getTime();
+  
+  if (nowMs >= riseMs && nowMs <= setMs) {
+    return {
+      text: 'LIVE / ACTIVE NOW',
+      color: '#00c853',
+      isActive: true,
+    };
+  }
+  
+  const diffMs = riseMs - nowMs;
+  if (diffMs < 0) {
+    return {
+      text: 'Sudah lewat / Passed',
+      color: '#5a7a9a',
+      isPassed: true,
+    };
+  }
+  
+  const totalMins = Math.floor(diffMs / 60000);
+  const hours = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  
+  if (hours > 0) {
+    return {
+      text: `Dalam ${hours}j ${mins}m / In ${hours}h ${mins}m`,
+      color: '#8fa0b5',
+      isActive: false,
+    };
+  } else {
+    const secs = Math.round((diffMs % 60000) / 1000);
+    return {
+      text: `Dalam ${mins}m ${secs}d / In ${mins}m ${secs}s`,
+      color: '#00e5ff',
+      isActive: false,
+    };
+  }
+}
+
 function getUpcomingPasses(tle1, tle2, observerLocation, simTime) {
   if (!observerLocation) return [];
   try {
@@ -374,52 +437,74 @@ export default function SelectedSatellitePanel({
       <div className="details-section">
         <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Compass size={12} className="section-icon" />
-          UPCOMING PASSES (24H)
+          PREDIKSI LINTASAN / PASS PREDICTIONS (24H)
         </h3>
         {observerLocation ? (
           <div>
-            <div className="observer-info-box" style={{ fontSize: '11px', color: '#8fa0b5', marginBottom: '8px', background: 'rgba(26,48,80,0.2)', padding: '6px', borderRadius: '4px' }}>
-              Observer: <strong>{observerLocation.name}</strong> ({observerLocation.lat.toFixed(4)}°, {observerLocation.lng.toFixed(4)}°)
+            <div className="observer-info-box">
+              <span className="observer-label-icon">📍</span>
+              <div className="observer-text-group">
+                <span className="observer-name">{observerLocation.name === 'Dropped Pin' ? 'Pin Peta / Dropped Pin' : 'Lokasi GPS / GPS Location'}</span>
+                <span className="observer-coords-sub font-numeric">
+                  {Math.abs(observerLocation.lat).toFixed(4)}°{observerLocation.lat >= 0 ? 'N' : 'S'}, {Math.abs(observerLocation.lng).toFixed(4)}°{observerLocation.lng >= 0 ? 'E' : 'W'}
+                </span>
+              </div>
             </div>
+
             {passes && passes.length > 0 ? (
-              <table className="details-table passes-table" style={{ width: '100%' }}>
-                <thead>
-                  <tr style={{ color: '#8fa0b5', fontSize: '9px' }}>
-                    <th style={{ textAlign: 'left', paddingBottom: '4px' }}>RISE TIME (LOCAL)</th>
-                    <th style={{ textAlign: 'center', paddingBottom: '4px' }}>MAX ELEV</th>
-                    <th style={{ textAlign: 'right', paddingBottom: '4px' }}>DURATION</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {passes.map((pass, index) => {
-                    const durationMs = pass.setTime.getTime() - pass.riseTime.getTime();
-                    const durMins = Math.floor(durationMs / 60000);
-                    const durSecs = Math.round((durationMs % 60000) / 1000);
-                    return (
-                      <tr key={index}>
-                        <td style={{ fontSize: '11px', padding: '3px 0' }}>
-                          {pass.riseTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                        </td>
-                        <td style={{ textAlign: 'center', fontWeight: '600', color: pass.maxElevation > 45 ? '#00c853' : pass.maxElevation > 25 ? '#e0e6ed' : '#5a7a9a', padding: '3px 0' }}>
-                          {Math.round(pass.maxElevation)}°
-                        </td>
-                        <td style={{ textAlign: 'right', fontSize: '11px', padding: '3px 0' }} className="font-numeric">
-                          {durMins}m {durSecs}s
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <div className="pass-card-list">
+                {passes.map((pass, index) => {
+                  const durationMs = pass.setTime.getTime() - pass.riseTime.getTime();
+                  const durMins = Math.floor(durationMs / 60000);
+                  const durSecs = Math.round((durationMs % 60000) / 1000);
+                  
+                  const rating = getElevationRating(pass.maxElevation);
+                  const dayLabel = getPassDateLabel(pass.riseTime, simTime);
+                  const status = getPassStatus(pass.riseTime, pass.setTime, simTime);
+                  
+                  const timeStr = pass.riseTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+
+                  return (
+                    <div 
+                      key={index} 
+                      className={`pass-card ${status.isActive ? 'active-pulse' : ''}`}
+                      style={{ borderLeft: `3px solid ${rating.color}` }}
+                    >
+                      <div className="pass-card-row">
+                        <div className="pass-card-col">
+                          <span className="pass-label">MUNCUL / RISE</span>
+                          <span className="pass-value-time font-numeric">{timeStr}</span>
+                          <span className="pass-sublabel">{dayLabel}</span>
+                        </div>
+                        <div className="pass-card-col" style={{ alignItems: 'center' }}>
+                          <span className="pass-label">ELEVASI / ELEV</span>
+                          <span className="pass-value-elev font-numeric" style={{ color: rating.color }}>{Math.round(pass.maxElevation)}°</span>
+                          <span className="pass-sublabel" style={{ color: rating.color }}>{rating.text}</span>
+                        </div>
+                        <div className="pass-card-col" style={{ alignItems: 'flex-end' }}>
+                          <span className="pass-label">DURASI / DURATION</span>
+                          <span className="pass-value-duration font-numeric">{durMins}m {durSecs}s</span>
+                          <span className="pass-sublabel-status" style={{ color: status.color }}>
+                            {status.isActive && <span className="live-dot-green"></span>}
+                            {status.text}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             ) : (
-              <p className="metric-loading" style={{ fontSize: '11px', color: '#5a7a9a', margin: 0 }}>
+              <p className="metric-loading" style={{ fontSize: '11px', color: '#5a7a9a', margin: '8px 0 0 0' }}>
+                Tidak ada lintasan terlihat dalam 24 jam ke depan.<br/>
                 No passes visible in the next 24 hours.
               </p>
             )}
           </div>
         ) : (
-          <p className="metric-loading" style={{ fontSize: '11px', color: '#5a7a9a', margin: 0 }}>
-            Set observer location in the sidebar to calculate pass predictions.
+          <p className="metric-loading" style={{ fontSize: '11px', color: '#5a7a9a', margin: '8px 0 0 0' }}>
+            Tentukan lokasi pengamat di panel peta untuk menghitung lintasan satelit.<br/>
+            Set observer location in map panel to calculate pass predictions.
           </p>
         )}
       </div>

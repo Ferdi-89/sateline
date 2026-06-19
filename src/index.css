@@ -1121,4 +1121,286 @@ canvas.map-area {
   box-shadow: 0 0 8px rgba(0, 229, 255, 0.12);
 }
 
+/* ============================================================
+   FLOATING OBSERVER LOCATION PANEL
+   ============================================================ */
+
+.observer-panel-floating {
+  position: absolute;
+  top: 96px;
+  right: 356px; /* 340px sidebar width + 16px gap */
+  width: 250px;
+  z-index: 10;
+  background: rgba(8, 18, 35, 0.85);
+  border: 1px solid rgba(0, 229, 255, 0.15);
+  border-radius: 4px;
+  padding: 12px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: all 0.3s ease;
+}
+
+.observer-panel-floating:hover {
+  border-color: rgba(0, 229, 255, 0.35);
+  box-shadow: 0 4px 25px rgba(0, 229, 255, 0.08);
+}
+
+.observer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.observer-title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #5a7a9a;
+  letter-spacing: 0.08em;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.observer-icon-spin {
+  color: #00e5ff;
+}
+
+.observer-clear-btn {
+  background: transparent;
+  border: none;
+  color: rgba(239, 68, 68, 0.7);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border-radius: 3px;
+  transition: all 0.2s ease;
+}
+
+.observer-clear-btn:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.observer-body {
+  background: rgba(5, 14, 26, 0.6);
+  border: 1px solid rgba(90, 122, 154, 0.1);
+  border-radius: 3px;
+  padding: 8px 10px;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+}
+
+.observer-coords {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+}
+
+.coords-source {
+  font-size: 0.6rem;
+  color: #8fa0b5;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.coords-values {
+  font-size: 0.8rem;
+  color: #00e5ff;
+  font-weight: 700;
+}
+
+.observer-placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.placeholder-main {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #8fa0b5;
+  margin: 0;
+}
+
+.placeholder-sub {
+  font-size: 0.6rem;
+  color: #5a7a9a;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.observer-footer {
+  display: flex;
+  gap: 6px;
+}
+
+.observer-action-btn {
+  flex: 1;
+  background: rgba(10, 22, 40, 0.6);
+  border: 1px solid rgba(90, 122, 154, 0.3);
+  border-radius: 3px;
+  padding: 5px 8px;
+  color: #8fa0b3;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.observer-action-btn:hover {
+  border-color: #00e5ff;
+  color: #e0e6ed;
+  background: rgba(0, 229, 255, 0.05);
+}
+
+.observer-action-btn.active-pinning {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #ef4444;
+  color: #ef4444;
+  animation: borderPulse 1.5s infinite ease-in-out;
+}
+
+.observer-info-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(26, 48, 80, 0.2);
+  border: 1px solid rgba(90, 122, 154, 0.15);
+  border-radius: 4px;
+  padding: 8px;
+  margin-bottom: 12px;
+}
+
+.observer-label-icon {
+  font-size: 1rem;
+}
+
+.observer-text-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.observer-name {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #e0e6ed;
+}
+
+.observer-coords-sub {
+  font-size: 0.65rem;
+  color: #8fa0b5;
+}
+
+/* ============================================================
+   UPCOMING PASSES CARD DESIGN
+   ============================================================ */
+
+.pass-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.pass-card {
+  background: rgba(10, 22, 40, 0.4);
+  border: 1px solid rgba(90, 122, 154, 0.1);
+  border-radius: 4px;
+  padding: 8px 10px;
+  transition: all 0.25s ease;
+}
+
+.pass-card:hover {
+  background: rgba(10, 22, 40, 0.6);
+  border-color: rgba(90, 122, 154, 0.2);
+  transform: translateX(2px);
+}
+
+.pass-card.active-pulse {
+  background: rgba(0, 200, 83, 0.05);
+  border-color: rgba(0, 200, 83, 0.2);
+  box-shadow: 0 0 10px rgba(0, 200, 83, 0.05);
+}
+
+.pass-card-row {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.pass-card-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.pass-label {
+  font-size: 0.5rem;
+  font-weight: 700;
+  color: #5a7a9a;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+
+.pass-value-time {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #e0e6ed;
+}
+
+.pass-value-elev {
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.pass-value-duration {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #e0e6ed;
+}
+
+.pass-sublabel {
+  font-size: 0.6rem;
+  color: #8fa0b5;
+  margin-top: 2px;
+}
+
+.pass-sublabel-status {
+  font-size: 0.58rem;
+  font-weight: 600;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.live-dot-green {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #00c853;
+  box-shadow: 0 0 5px #00c853;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes borderPulse {
+  0% { border-color: rgba(239, 68, 68, 0.3); }
+  50% { border-color: rgba(239, 68, 68, 1); }
+  100% { border-color: rgba(239, 68, 68, 0.3); }
+}
+
+
 

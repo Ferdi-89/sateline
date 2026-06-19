@@ -5,6 +5,7 @@ import Header from './components/Header';
 import Legend from './components/Legend';
 import SelectedSatellitePanel from './components/SelectedSatellitePanel';
 import TimeControls from './components/TimeControls';
+import ObserverPanel from './components/ObserverPanel';
 
 // Lazy-load CesiumMapView (heavy dependency ~30MB) only when user toggles to 3D
 const CesiumMapView = lazy(() => import('./components/CesiumMapView'));
@@ -231,6 +232,14 @@ function App() {
         simTime={simTime}
       />
 
+      {/* Floating Observer Location Panel */}
+      <ObserverPanel
+        observerLocation={observerLocation}
+        onSetObserverLocation={setObserverLocation}
+        isPinMode={isPinMode}
+        onSetPinMode={setIsPinMode}
+      />
+
       {/* Left detail panel */}
       {selectedSatellite && (
         <SelectedSatellitePanel
@@ -254,10 +263,6 @@ function App() {
         setSearchQuery={setSearchQuery}
         selectedSatellite={selectedSatellite}
         onSelectSatellite={setSelectedSatellite}
-        observerLocation={observerLocation}
-        onSetObserverLocation={setObserverLocation}
-        isPinMode={isPinMode}
-        onSetPinMode={setIsPinMode}
       />
 
       {/* Bottom-right legend */}

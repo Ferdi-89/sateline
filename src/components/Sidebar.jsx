@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Radio, Compass, Orbit, MapPin, Navigation, Trash2 } from 'lucide-react';
+import { Search, Radio, Orbit } from 'lucide-react';
 
 const CATEGORIES = [
   { id: 'all', label: 'ALL SATS' },
@@ -28,10 +28,6 @@ function Sidebar({
   setSearchQuery, 
   selectedSatellite, 
   onSelectSatellite,
-  observerLocation,
-  onSetObserverLocation,
-  isPinMode,
-  onSetPinMode,
 }) {
   // Compute counts per category from allSatellites
   const counts = {};
@@ -107,115 +103,7 @@ function Sidebar({
         ))}
       </div>
 
-      {/* Observer Location Panel */}
-      <div className="observer-panel" style={{
-        margin: '12px 16px',
-        padding: '12px',
-        background: 'rgba(10, 22, 40, 0.5)',
-        border: '1px dashed rgba(0, 229, 255, 0.15)',
-        borderRadius: '4px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: '0.65rem', fontWeight: '700', color: '#5a7a9a', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <MapPin size={11} style={{ color: '#ff3d00' }} />
-            OBSERVER LOCATION
-          </span>
-          {observerLocation && (
-            <button 
-              onClick={() => onSetObserverLocation(null)}
-              style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}
-              title="Clear Location"
-            >
-              <Trash2 size={11} />
-            </button>
-          )}
-        </div>
-
-        <div style={{ fontSize: '0.75rem', color: observerLocation ? '#e0e6ed' : '#5a7a9a', fontWeight: observerLocation ? '600' : '400' }}>
-          {observerLocation ? (
-            <div className="font-numeric">
-              {observerLocation.name === 'Dropped Pin' ? '📍 Dropped Pin' : '🛰️ GPS Location'}<br/>
-              <span style={{ color: '#8fa0b5', fontSize: '10px' }}>
-                {observerLocation.lat.toFixed(4)}°N, {observerLocation.lng.toFixed(4)}°E
-              </span>
-            </div>
-          ) : (
-            <span style={{ fontStyle: 'italic', fontSize: '10px' }}>Location not set. Enable GPS or use map pin.</span>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
-          <button
-            onClick={() => {
-              if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                  (pos) => {
-                    onSetObserverLocation({
-                      lat: pos.coords.latitude,
-                      lng: pos.coords.longitude,
-                      name: 'My GPS Location',
-                    });
-                  },
-                  (err) => {
-                    alert('Geolocation error: ' + err.message);
-                  }
-                );
-              } else {
-                alert('Geolocation not supported by this browser.');
-              }
-            }}
-            style={{
-              flex: 1,
-              background: 'rgba(0, 229, 255, 0.08)',
-              border: '1px solid rgba(0, 229, 255, 0.25)',
-              borderRadius: '3px',
-              padding: '5px 8px',
-              color: '#00e5ff',
-              fontSize: '0.65rem',
-              fontWeight: '600',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              transition: 'all 0.2s ease',
-            }}
-            onMouseOver={(e) => e.currentTarget.style.background = 'rgba(0, 229, 255, 0.15)'}
-            onMouseOut={(e) => e.currentTarget.style.background = 'rgba(0, 229, 255, 0.08)'}
-          >
-            <Navigation size={10} />
-            USE GPS
-          </button>
-
-          <button
-            onClick={() => onSetPinMode(!isPinMode)}
-            style={{
-              flex: 1,
-              background: isPinMode ? '#ff3d00' : 'rgba(90, 122, 154, 0.08)',
-              border: `1px solid ${isPinMode ? '#ff3d00' : 'rgba(90, 122, 154, 0.25)'}`,
-              borderRadius: '3px',
-              padding: '5px 8px',
-              color: isPinMode ? '#ffffff' : '#e0e6ed',
-              fontSize: '0.65rem',
-              fontWeight: '600',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              transition: 'all 0.2s ease',
-            }}
-            onMouseOver={(e) => { if (!isPinMode) e.currentTarget.style.background = 'rgba(90, 122, 154, 0.15)'; }}
-            onMouseOut={(e) => { if (!isPinMode) e.currentTarget.style.background = 'rgba(90, 122, 154, 0.08)'; }}
-          >
-            <MapPin size={10} />
-            {isPinMode ? 'TAP ON MAP...' : 'DROP PIN'}
-          </button>
-        </div>
-      </div>
+      {/* Observer Location Panel has been moved to floating map widget (ObserverPanel) */}
 
       {/* Satellite List Header */}
       <div className="satellite-list-header">
