@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigation, MapPin, Trash2, Compass } from 'lucide-react';
+import { Navigation, MapPin, Trash2, Compass, Radio, AlertCircle } from 'lucide-react';
 
 export default function ObserverPanel({
   observerLocation,
@@ -28,59 +28,94 @@ export default function ObserverPanel({
 
   return (
     <div className="observer-panel-floating">
+      {/* Top Header Card */}
       <div className="observer-header">
         <span className="observer-title">
           <Compass size={13} className="observer-icon-spin" />
-          STASIUN PENGAMAT / OBSERVER
+          OBSERVER STATION
         </span>
-        {observerLocation && (
-          <button
-            onClick={() => {
-              onSetObserverLocation(null);
-              if (isPinMode) onSetPinMode(false);
-            }}
-            className="observer-clear-btn"
-            title="Hapus Lokasi / Clear Location"
-          >
-            <Trash2 size={12} />
-          </button>
+        {observerLocation ? (
+          <div className="observer-status-badge locked">
+            <span className="status-dot-blink green"></span>
+            <span>LOCKED</span>
+          </div>
+        ) : (
+          <div className="observer-status-badge empty">
+            <span className="status-dot-blink orange"></span>
+            <span>NO DATA</span>
+          </div>
         )}
       </div>
 
       <div className="observer-body">
         {observerLocation ? (
-          <div className="observer-coords font-numeric">
-            <span className="coords-source">
-              {observerLocation.name === 'Dropped Pin' ? '📍 PIN PETA / DROPPED PIN' : '🛰️ LOKASI GPS / GPS LOCATION'}
-            </span>
-            <span className="coords-values">
-              {Math.abs(observerLocation.lat).toFixed(4)}°{observerLocation.lat >= 0 ? 'N' : 'S'}, {Math.abs(observerLocation.lng).toFixed(4)}°{observerLocation.lng >= 0 ? 'E' : 'W'}
-            </span>
+          <div className="observer-telemetry font-numeric">
+            <div className="telemetry-source">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Radio size={10} className="telemetry-pulse-icon" />
+                <span>{observerLocation.name === 'Dropped Pin' ? 'MAP PIN LOCATION' : 'GPS POSITION FIX'}</span>
+              </div>
+              
+              <button
+                onClick={() => {
+                  onSetObserverLocation(null);
+                  if (isPinMode) onSetPinMode(false);
+                }}
+                className="observer-clear-icon-btn"
+                title="Reset Koordinat / Clear Position"
+              >
+                <Trash2 size={11} />
+              </button>
+            </div>
+
+            <div className="telemetry-coords-grid">
+              <div className="telemetry-coord-box">
+                <span className="coord-lbl">LATITUDE</span>
+                <span className="coord-val">
+                  {Math.abs(observerLocation.lat).toFixed(5)}°
+                  <span className="coord-dir">{observerLocation.lat >= 0 ? 'N' : 'S'}</span>
+                </span>
+              </div>
+              <div className="telemetry-coord-box">
+                <span className="coord-lbl">LONGITUDE</span>
+                <span className="coord-val">
+                  {Math.abs(observerLocation.lng).toFixed(5)}°
+                  <span className="coord-dir">{observerLocation.lng >= 0 ? 'E' : 'W'}</span>
+                </span>
+              </div>
+            </div>
           </div>
         ) : (
-          <div className="observer-placeholder">
-            <p className="placeholder-main">Koordinat Pengamat Kosong</p>
-            <p className="placeholder-sub">Aktifkan GPS atau letakkan pin pada peta untuk memprediksi lintasan terlihat.</p>
+          <div className="observer-unconfigured">
+            <AlertCircle size={16} className="unconfigured-warning-icon" />
+            <div className="unconfigured-text">
+              <p className="unconfigured-title">Koordinat Kosong / No Data</p>
+              <p className="unconfigured-desc">Aktifkan GPS atau tekan "Drop Pin" lalu tandai lokasi pengamat langsung pada peta.</p>
+            </div>
           </div>
         )}
       </div>
 
-      <div className="observer-footer">
+      <div className="observer-actions">
         <button
           onClick={handleGPS}
-          className="observer-action-btn gps-btn"
-          title="Gunakan lokasi GPS perangkat Anda"
+          className="observer-btn-premium gps-btn"
+          title="Sinkronisasi lokasi perangkat menggunakan GPS"
         >
-          <Navigation size={11} />
+          <div className="btn-icon-wrapper">
+            <Navigation size={12} className="btn-icon-gps" />
+          </div>
           <span>USE GPS</span>
         </button>
 
         <button
           onClick={() => onSetPinMode(!isPinMode)}
-          className={`observer-action-btn pin-btn ${isPinMode ? 'active-pinning' : ''}`}
-          title="Tandai koordinat dengan pin langsung di peta"
+          className={`observer-btn-premium pin-btn ${isPinMode ? 'active-pinning' : ''}`}
+          title="Pilih lokasi secara manual dengan mengeklik area peta"
         >
-          <MapPin size={11} />
+          <div className="btn-icon-wrapper">
+            <MapPin size={12} className="btn-icon-pin" />
+          </div>
           <span>{isPinMode ? 'TAP ON MAP...' : 'DROP PIN'}</span>
         </button>
       </div>
