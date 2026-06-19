@@ -83,11 +83,20 @@ function App() {
   const [observerLocation, setObserverLocation] = useState(null);
   const [isPinMode, setIsPinMode] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [showObserverPanel, setShowObserverPanel] = useState(window.innerWidth > 768);
   
   // Time Simulation State
   const [isPaused, setIsPaused] = useState(false);
   const [timeMultiplier, setTimeMultiplier] = useState(1);
   const [simTime, setSimTime] = useState(new Date());
+
+  // Handle satellite selection (with auto-collapse sidebar on mobile)
+  const handleSelectSatellite = (sat) => {
+    setSelectedSatellite(sat);
+    if (sat && window.innerWidth <= 768) {
+      setIsSidebarOpen(false);
+    }
+  };
 
   // 5Hz Simulated clock tick for UI updates (Header and Detail Panel)
   useEffect(() => {
@@ -178,12 +187,12 @@ function App() {
       )}
 
       {/* Full-screen map — 2D Canvas or 3D Cesium Globe */}
-      <div className="map-area">
+      <div className={`map-area ${isSidebarOpen ? '' : 'sidebar-collapsed'}`}>
         {viewMode === '2d' ? (
           <MapView
             satellites={allSatellites}
             selectedSatellite={selectedSatellite}
-            onSelectSatellite={setSelectedSatellite}
+            onSelectSatellite={handleSelectSatellite}
             simTime={simTime}
             isPaused={isPaused}
             timeMultiplier={timeMultiplier}
@@ -202,7 +211,7 @@ function App() {
             <CesiumMapView
               satellites={allSatellites}
               selectedSatellite={selectedSatellite}
-              onSelectSatellite={setSelectedSatellite}
+              onSelectSatellite={handleSelectSatellite}
               simTime={simTime}
               isPaused={isPaused}
               timeMultiplier={timeMultiplier}
@@ -215,6 +224,19 @@ function App() {
           </Suspense>
         )}
       </div>
+
+      {/* Left detail panel (Placed before TimeControls to allow CSS sibling targeting) */}
+      {selectedSatellite && (
+        <SelectedSatellitePanel
+          satellite={selectedSatellite}
+          onClose={() => setSelectedSatellite(null)}
+          simTime={simTime}
+          viewMode={viewMode}
+          isCameraLocked={isCameraLocked}
+          setIsCameraLocked={setIsCameraLocked}
+          observerLocation={observerLocation}
+        />
+      )}
 
       {/* Time Controls (floating above map) */}
       <TimeControls
@@ -232,27 +254,20 @@ function App() {
         viewMode={viewMode}
         setViewMode={setViewMode}
         simTime={simTime}
+        isSidebarOpen={isSidebarOpen}
+        setIsSidebarOpen={setIsSidebarOpen}
+        showObserverPanel={showObserverPanel}
+        setShowObserverPanel={setShowObserverPanel}
       />
 
       {/* Floating Observer Location Panel */}
-      <ObserverPanel
-        observerLocation={observerLocation}
-        onSetObserverLocation={setObserverLocation}
-        isPinMode={isPinMode}
-        onSetPinMode={setIsPinMode}
-        isSidebarOpen={isSidebarOpen}
-      />
-
-      {/* Left detail panel */}
-      {selectedSatellite && (
-        <SelectedSatellitePanel
-          satellite={selectedSatellite}
-          onClose={() => setSelectedSatellite(null)}
-          simTime={simTime}
-          viewMode={viewMode}
-          isCameraLocked={isCameraLocked}
-          setIsCameraLocked={setIsCameraLocked}
+      {showObserverPanel && (
+        <ObserverPanel
           observerLocation={observerLocation}
+          onSetObserverLocation={setObserverLocation}
+          isPinMode={isPinMode}
+          onSetPinMode={setIsPinMode}
+          isSidebarOpen={isSidebarOpen}
         />
       )}
 
@@ -274,7 +289,7 @@ function App() {
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         selectedSatellite={selectedSatellite}
-        onSelectSatellite={setSelectedSatellite}
+        onSelectSatellite={handleSelectSatellite}
         isOpen={isSidebarOpen}
       />
 

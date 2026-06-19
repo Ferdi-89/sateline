@@ -564,10 +564,12 @@ export default function MapView({
     return () => canvas.removeEventListener('wheel', onWheel);
   }, []);
 
-  /* ── Pan: mouse drag ────────────────────────────────────── */
+  /* ── Pan & Zoom: mouse drag, touch drag & pinch ───────────── */
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    // Mouse drag handlers
     const onMouseDown = (e) => {
       if (e.button !== 0) return;
       isDraggingRef.current = true;
@@ -593,14 +595,99 @@ export default function MapView({
       dragRef.current = null;
     };
 
+    // Touch handlers (Drag & Pinch zoom)
+    let startTouchDist = null;
+    let startScale = 1;
+    let startCenter = { x: 0, y: 0 };
+
+    const getTouchDistAndCenter = (touches) => {
+      const t1 = touches[0];
+      const t2 = touches[1];
+      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      const center = {
+        x: (t1.clientX + t2.clientX) / 2,
+        y: (t1.clientY + t2.clientY) / 2
+      };
+      return { dist, center };
+    };
+
+    const onTouchStart = (e) => {
+      if (e.touches.length === 1) {
+        // Single touch: start drag
+        isDraggingRef.current = true;
+        const touch = e.touches[0];
+        dragRef.current = {
+          startX: touch.clientX,
+          startY: touch.clientY,
+          startTx: xfRef.current.tx,
+          startTy: xfRef.current.ty,
+        };
+      } else if (e.touches.length === 2) {
+        // Multi-touch: start pinch zoom
+        isDraggingRef.current = false; // Disable dragging
+        const { dist, center } = getTouchDistAndCenter(e.touches);
+        startTouchDist = dist;
+        startScale = xfRef.current.scale;
+        startCenter = center;
+      }
+    };
+
+    const onTouchMove = (e) => {
+      if (e.touches.length === 1 && isDraggingRef.current && dragRef.current) {
+        // Single finger drag
+        const touch = e.touches[0];
+        const dx = touch.clientX - dragRef.current.startX;
+        const dy = touch.clientY - dragRef.current.startY;
+        xfRef.current = {
+          ...xfRef.current,
+          tx: dragRef.current.startTx + dx,
+          ty: dragRef.current.startTy + dy,
+        };
+      } else if (e.touches.length === 2 && startTouchDist !== null) {
+        // Two fingers pinch zoom
+        const { dist, center } = getTouchDistAndCenter(e.touches);
+        const ratio = dist / startTouchDist;
+        const newScale = Math.min(20, Math.max(0.5, startScale * ratio));
+
+        // Calculate center relative to canvas
+        const rect = canvas.getBoundingClientRect();
+        const canvasX = (center.x - rect.left) * (canvas.width / rect.width);
+        const canvasY = (center.y - rect.top) * (canvas.height / rect.height);
+
+        const oldScale = xfRef.current.scale;
+        const tx = canvasX - (canvasX - xfRef.current.tx) * (newScale / oldScale);
+        const ty = canvasY - (canvasY - xfRef.current.ty) * (newScale / oldScale);
+
+        xfRef.current = {
+          scale: newScale,
+          tx,
+          ty
+        };
+      }
+    };
+
+    const onTouchEnd = () => {
+      isDraggingRef.current = false;
+      dragRef.current = null;
+      startTouchDist = null;
+    };
+
     canvas.addEventListener('mousedown', onMouseDown);
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
+
+    canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+    canvas.addEventListener('touchmove', onTouchMove, { passive: true });
+    canvas.addEventListener('touchend', onTouchEnd, { passive: true });
 
     return () => {
       canvas.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
+
+      canvas.removeEventListener('touchstart', onTouchStart);
+      canvas.removeEventListener('touchmove', onTouchMove);
+      canvas.removeEventListener('touchend', onTouchEnd);
     };
   }, []);
 
