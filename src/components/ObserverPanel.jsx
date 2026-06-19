@@ -6,6 +6,7 @@ export default function ObserverPanel({
   onSetObserverLocation,
   isPinMode,
   onSetPinMode,
+  isSidebarOpen = true,
 }) {
   const handleGPS = () => {
     if (navigator.geolocation) {
@@ -27,7 +28,7 @@ export default function ObserverPanel({
   };
 
   return (
-    <div className="observer-panel-floating">
+    <div className={`observer-panel-floating ${isSidebarOpen ? '' : 'sidebar-collapsed'}`}>
       {/* Top Header Card */}
       <div className="observer-header">
         <span className="observer-title">

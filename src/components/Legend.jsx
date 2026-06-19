@@ -1,8 +1,8 @@
 import React from 'react';
 
-function Legend() {
+function Legend({ isOpen = true }) {
   return (
-    <div className="legend-panel">
+    <div className={`legend-panel ${isOpen ? '' : 'collapsed'}`}>
       <span className="legend-item">
         <span className="legend-dot station"></span> Space Station
       </span>

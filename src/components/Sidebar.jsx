@@ -28,6 +28,7 @@ function Sidebar({
   setSearchQuery, 
   selectedSatellite, 
   onSelectSatellite,
+  isOpen = true,
 }) {
   // Compute counts per category from allSatellites
   const counts = {};
@@ -57,7 +58,7 @@ function Sidebar({
   };
 
   return (
-    <div className="sidebar">
+    <div className={`sidebar ${isOpen ? '' : 'collapsed'}`}>
       {/* Sidebar Header */}
       <div className="sidebar-header">
         <div className="sidebar-header-main">

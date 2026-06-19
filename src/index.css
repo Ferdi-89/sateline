@@ -167,6 +167,11 @@ canvas.map-area {
   display: flex;
   flex-direction: column;
   padding: 20px;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar.collapsed {
+  transform: translateX(340px);
 }
 
 /* -- Sidebar Header -- */
@@ -537,6 +542,11 @@ canvas.map-area {
   border-radius: 4px;
   padding: 10px 14px;
   width: 170px;
+  transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.legend-panel.collapsed {
+  right: 16px;
 }
 
 .legend-item {
@@ -1578,6 +1588,50 @@ canvas.map-area {
   color: #ef4444;
   border: 1px solid rgba(239, 68, 68, 0.15);
 }
+
+/* ============================================================
+   COLLAPSED STATES & FLOATING TOGGLE TAB
+   ============================================================ */
+
+.observer-panel-floating.sidebar-collapsed {
+  right: 16px;
+}
+
+.sidebar-toggle-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  right: 348px; /* 340px sidebar width + 8px gap */
+  width: 20px;
+  height: 60px;
+  border-radius: 4px 0 0 4px;
+  background: rgba(8, 18, 35, 0.9);
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  border-right: none;
+  color: #00e5ff;
+  cursor: pointer;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  box-shadow: -2px 0 15px rgba(0, 0, 0, 0.5);
+  transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.25s, color 0.25s, border-color 0.25s;
+}
+
+.sidebar-toggle-btn:hover {
+  background: rgba(0, 229, 255, 0.08);
+  border-color: #00e5ff;
+  color: #ffffff;
+}
+
+.sidebar-toggle-btn.collapsed {
+  right: 16px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+}
+
 
 .sky-radar-svg {
   width: 120px;

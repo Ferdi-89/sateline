@@ -6,6 +6,7 @@ import Legend from './components/Legend';
 import SelectedSatellitePanel from './components/SelectedSatellitePanel';
 import TimeControls from './components/TimeControls';
 import ObserverPanel from './components/ObserverPanel';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Lazy-load CesiumMapView (heavy dependency ~30MB) only when user toggles to 3D
 const CesiumMapView = lazy(() => import('./components/CesiumMapView'));
@@ -81,6 +82,7 @@ function App() {
   // Observer location & pinning states
   const [observerLocation, setObserverLocation] = useState(null);
   const [isPinMode, setIsPinMode] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   
   // Time Simulation State
   const [isPaused, setIsPaused] = useState(false);
@@ -238,6 +240,7 @@ function App() {
         onSetObserverLocation={setObserverLocation}
         isPinMode={isPinMode}
         onSetPinMode={setIsPinMode}
+        isSidebarOpen={isSidebarOpen}
       />
 
       {/* Left detail panel */}
@@ -253,6 +256,15 @@ function App() {
         />
       )}
 
+      {/* Sidebar Toggle Button */}
+      <button
+        className={`sidebar-toggle-btn ${isSidebarOpen ? '' : 'collapsed'}`}
+        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+        title={isSidebarOpen ? 'Hide Sidebar / Tutup Sidebar' : 'Show Sidebar / Buka Sidebar'}
+      >
+        {isSidebarOpen ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+      </button>
+
       {/* Right sidebar */}
       <Sidebar
         satellites={filteredSatellites}
@@ -263,10 +275,11 @@ function App() {
         setSearchQuery={setSearchQuery}
         selectedSatellite={selectedSatellite}
         onSelectSatellite={setSelectedSatellite}
+        isOpen={isSidebarOpen}
       />
 
       {/* Bottom-right legend */}
-      <Legend />
+      <Legend isOpen={isSidebarOpen} />
 
       {/* Footer */}
       <div className="footer-text">
