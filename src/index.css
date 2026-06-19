@@ -1534,5 +1534,151 @@ canvas.map-area {
   100% { border-color: rgba(239, 68, 68, 0.3); }
 }
 
+/* ============================================================
+   SKY POINTING RADAR / COMPASS
+   ============================================================ */
+
+.sky-radar-container {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(5, 14, 26, 0.5);
+  border: 1px solid rgba(90, 122, 154, 0.15);
+  border-radius: 4px;
+  padding: 12px;
+  margin-top: 8px;
+}
+
+.sky-radar-svg {
+  width: 100px;
+  height: 100px;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.radar-ring {
+  fill: none;
+  stroke-dasharray: 2 2;
+}
+
+.radar-ring.horizon {
+  stroke: rgba(0, 229, 255, 0.3);
+  stroke-width: 1;
+  stroke-dasharray: none;
+}
+
+.radar-ring.mid-el,
+.radar-ring.high-el {
+  stroke: rgba(90, 122, 154, 0.25);
+  stroke-width: 0.75;
+}
+
+.radar-axis {
+  stroke: rgba(90, 122, 154, 0.2);
+  stroke-width: 0.75;
+  stroke-dasharray: 2 4;
+}
+
+.radar-cardinal {
+  fill: #5a7a9a;
+  font-size: 8px;
+  font-family: 'Space Mono', monospace;
+  font-weight: 700;
+  text-anchor: middle;
+}
+
+.radar-heading-line {
+  stroke-width: 1;
+  transition: all 0.2s ease;
+}
+
+.radar-heading-line.visible {
+  stroke: rgba(0, 229, 255, 0.6);
+  stroke-dasharray: none;
+}
+
+.radar-heading-line.below-horizon {
+  stroke: rgba(90, 122, 154, 0.25);
+  stroke-dasharray: 2 2;
+}
+
+.radar-sat-marker {
+  transition: all 0.2s ease;
+}
+
+.radar-sat-marker.visible {
+  fill: #00c853;
+  stroke: #ffffff;
+  stroke-width: 1;
+  box-shadow: 0 0 8px #00c853;
+  animation: pulse 1.5s infinite;
+}
+
+.radar-sat-marker.below-horizon {
+  fill: #ef4444;
+  stroke: rgba(239, 68, 68, 0.4);
+  stroke-width: 1;
+}
+
+.sky-radar-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-grow: 1;
+}
+
+.radar-metric {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px dashed rgba(90, 122, 154, 0.1);
+  padding-bottom: 3px;
+}
+
+.radar-metric-label {
+  font-size: 0.52rem;
+  font-weight: 700;
+  color: #5a7a9a;
+  letter-spacing: 0.05em;
+}
+
+.radar-metric-val {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #e0e6ed;
+}
+
+.radar-cardinal-sub {
+  color: #00e5ff;
+  font-size: 0.6rem;
+  margin-left: 2px;
+}
+
+.radar-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 6px;
+  border-radius: 2px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin-top: 2px;
+  width: max-content;
+}
+
+.radar-status-badge.visible {
+  background: rgba(0, 200, 83, 0.1);
+  color: #00c853;
+  border: 1px solid rgba(0, 200, 83, 0.2);
+}
+
+.radar-status-badge.below {
+  background: rgba(239, 68, 68, 0.05);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+
 
 

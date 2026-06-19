@@ -71,6 +71,29 @@ function parseLaunchInfo(intDesg) {
 
 import { useMemo } from 'react';
 
+function getCardinalDirection(azimuth) {
+  const az = (azimuth + 360) % 360;
+  const dirs = [
+    { label: 'U / N', min: 337.5, max: 22.5 },
+    { label: 'TL / NE', min: 22.5, max: 67.5 },
+    { label: 'T / E', min: 67.5, max: 112.5 },
+    { label: 'TG / SE', min: 112.5, max: 157.5 },
+    { label: 'S / S', min: 157.5, max: 202.5 },
+    { label: 'BD / SW', min: 202.5, max: 247.5 },
+    { label: 'B / W', min: 247.5, max: 292.5 },
+    { label: 'BL / NW', min: 292.5, max: 337.5 },
+  ];
+  
+  for (const d of dirs) {
+    if (d.min > d.max) {
+      if (az >= d.min || az < d.max) return d.label;
+    } else {
+      if (az >= d.min && az < d.max) return d.label;
+    }
+  }
+  return 'U / N';
+}
+
 function getElevationRating(elev) {
   if (elev >= 45) return { text: 'Tinggi / High', color: '#00e5ff' };
   if (elev >= 25) return { text: 'Sedang / Med', color: '#ffea00' };
@@ -355,6 +378,37 @@ export default function SelectedSatellitePanel({
   const kep = parseTLEDetails(sat.tle1, sat.tle2);
   const launchInfo = kep ? parseLaunchInfo(kep.intDesg) : 'N/A';
 
+  // Calculate real-time look angles from observer to satellite
+  let lookAngles = null;
+  if (observerLocation) {
+    try {
+      const satrec = satellite.twoline2satrec(sat.tle1, sat.tle2);
+      const pv = satellite.propagate(satrec, simTime);
+      if (pv && pv.position) {
+        const observerGeodetic = {
+          latitude: observerLocation.lat * Math.PI / 180,
+          longitude: observerLocation.lng * Math.PI / 180,
+          height: 0.1, // km (100m)
+        };
+        const gmst = satellite.gstime(simTime);
+        const positionEcf = satellite.eciToEcf(pv.position, gmst);
+        const angles = satellite.ecfToLookAngles(observerGeodetic, positionEcf);
+        
+        const az = angles.azimuth * (180 / Math.PI);
+        const el = angles.elevation * (180 / Math.PI);
+        const range = angles.rangeSat;
+        
+        lookAngles = {
+          azimuth: az,
+          elevation: el,
+          range: range,
+        };
+      }
+    } catch (e) {
+      // Ignore propagation errors
+    }
+  }
+
   return (
     <div className="details-panel" style={{ '--accent-color': color }}>
       {/* Detail Header */}
@@ -429,6 +483,104 @@ export default function SelectedSatellitePanel({
           </>
         ) : (
           <p className="metric-loading">Recalculating orbital coordinates...</p>
+        )}
+      </div>
+
+      {/* Sky Pointing Guide Panel */}
+      <div className="details-divider"></div>
+      <div className="details-section">
+        <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Compass size={12} className="section-icon" />
+          ARAH POINTING LANGIT / SKY RADAR
+        </h3>
+        {observerLocation ? (
+          lookAngles ? (
+            <div className="sky-radar-container">
+              <svg className="sky-radar-svg" viewBox="0 0 100 100">
+                {/* Compass Dial */}
+                <circle cx="50" cy="50" r="44" className="radar-ring horizon" />
+                <circle cx="50" cy="50" r="29" className="radar-ring mid-el" />
+                <circle cx="50" cy="50" r="14" className="radar-ring high-el" />
+                
+                {/* Crosshairs */}
+                <line x1="50" y1="6" x2="50" y2="94" className="radar-axis" />
+                <line x1="6" y1="50" x2="94" y2="50" className="radar-axis" />
+                
+                {/* Cardinal Directions */}
+                <text x="50" y="12" className="radar-cardinal">U</text>
+                <text x="89" y="53" className="radar-cardinal">T</text>
+                <text x="50" y="93" className="radar-cardinal">S</text>
+                <text x="11" y="53" className="radar-cardinal">B</text>
+                
+                {/* Heading Line */}
+                {(() => {
+                  const azRad = (lookAngles.azimuth * Math.PI) / 180;
+                  const x2 = 50 + 44 * Math.sin(azRad);
+                  const y2 = 50 - 44 * Math.cos(azRad);
+                  return (
+                    <line 
+                      x1="50" 
+                      y1="50" 
+                      x2={x2} 
+                      y2={y2} 
+                      className={`radar-heading-line ${lookAngles.elevation >= 0 ? 'visible' : 'below-horizon'}`} 
+                    />
+                  );
+                })()}
+
+                {/* Satellite Dot */}
+                {(() => {
+                  const el = lookAngles.elevation;
+                  const r = el >= 0 
+                    ? ((90 - el) / 90) * 44 
+                    : 44; // Lock to horizon if below
+                  const azRad = ((lookAngles.azimuth - 90) * Math.PI) / 180;
+                  const cx = 50 + r * Math.cos(azRad);
+                  const cy = 50 + r * Math.sin(azRad);
+                  return (
+                    <circle 
+                      cx={cx} 
+                      cy={cy} 
+                      r={el >= 0 ? 4 : 3.5} 
+                      className={`radar-sat-marker ${el >= 0 ? 'visible' : 'below-horizon'}`} 
+                    />
+                  );
+                })()}
+              </svg>
+
+              <div className="sky-radar-info">
+                <div className="radar-metric">
+                  <span className="radar-metric-label">AZIMUTH</span>
+                  <span className="radar-metric-val font-numeric">
+                    {Math.round(lookAngles.azimuth)}° <span className="radar-cardinal-sub">{getCardinalDirection(lookAngles.azimuth)}</span>
+                  </span>
+                </div>
+                <div className="radar-metric">
+                  <span className="radar-metric-label">ELEVASI / ELEV</span>
+                  <span className="radar-metric-val font-numeric" style={{ color: lookAngles.elevation >= 0 ? '#00c853' : '#ff3d00' }}>
+                    {Math.round(lookAngles.elevation)}°
+                  </span>
+                </div>
+                <div className="radar-metric">
+                  <span className="radar-metric-label">JARAK / RANGE</span>
+                  <span className="radar-metric-val font-numeric">
+                    {Math.round(lookAngles.range).toLocaleString()} km
+                  </span>
+                </div>
+                
+                <span className={`radar-status-badge ${lookAngles.elevation >= 0 ? 'visible' : 'below'}`}>
+                  {lookAngles.elevation >= 0 ? '🛰️ TERLIHAT / VISIBLE' : '🛰️ DI BAWAH UFUK / BELOW'}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <p className="metric-loading">Menghitung arah satelit...</p>
+          )
+        ) : (
+          <p className="metric-loading" style={{ fontSize: '11px', color: '#5a7a9a', margin: 0 }}>
+            Tentukan lokasi pengamat untuk mengaktifkan radar arah langit.<br/>
+            Set observer location to activate sky pointing guide.
+          </p>
         )}
       </div>
 
