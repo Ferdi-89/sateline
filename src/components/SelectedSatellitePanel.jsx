@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as satellite from 'satellite.js';
-import { X, Globe, Compass, Code, Activity, Target } from 'lucide-react';
+import { X, Globe, Compass, Code, Activity, Target, Radio } from 'lucide-react';
 
 const CATEGORY_COLORS = {
   station:  '#00e5ff',
@@ -69,6 +69,74 @@ function parseLaunchInfo(intDesg) {
   }
 }
 
+import { useMemo } from 'react';
+
+function getUpcomingPasses(tle1, tle2, observerLocation, simTime) {
+  if (!observerLocation) return [];
+  try {
+    const satrec = satellite.twoline2satrec(tle1, tle2);
+    const observerGeodetic = {
+      latitude: observerLocation.lat * Math.PI / 180,
+      longitude: observerLocation.lng * Math.PI / 180,
+      height: 0.1, // assumed observer height in km (100m)
+    };
+
+    const passes = [];
+    let inPass = false;
+    let currentPass = null;
+
+    // Scan 24 hours in steps of 30 seconds
+    const stepSeconds = 30;
+    const totalSteps = (24 * 3600) / stepSeconds;
+
+    for (let step = 0; step < totalSteps; step++) {
+      const time = new Date(simTime.getTime() + step * stepSeconds * 1000);
+      const positionAndVelocity = satellite.propagate(satrec, time);
+      if (!positionAndVelocity.position) continue;
+
+      const gmst = satellite.gstime(time);
+      const positionEcf = satellite.eciToEcf(positionAndVelocity.position, gmst);
+      const lookAngles = satellite.ecfToLookAngles(observerGeodetic, positionEcf);
+
+      const elevation = lookAngles.elevation * (180 / Math.PI); // in degrees
+
+      if (elevation >= 10) { // 10 degree elevation threshold
+        if (!inPass) {
+          inPass = true;
+          currentPass = {
+            riseTime: time,
+            maxElevation: elevation,
+            maxElevationTime: time,
+            setTime: null,
+          };
+        } else {
+          if (elevation > currentPass.maxElevation) {
+            currentPass.maxElevation = elevation;
+            currentPass.maxElevationTime = time;
+          }
+        }
+      } else {
+        if (inPass) {
+          inPass = false;
+          currentPass.setTime = time;
+          passes.push(currentPass);
+          currentPass = null;
+          if (passes.length >= 5) break;
+        }
+      }
+    }
+    
+    if (inPass && currentPass && passes.length < 5) {
+      currentPass.setTime = new Date(simTime.getTime() + 24 * 3600 * 1000);
+      passes.push(currentPass);
+    }
+    return passes;
+  } catch (err) {
+    console.error('Failed to calculate passes:', err);
+    return [];
+  }
+}
+
 export default function SelectedSatellitePanel({ 
   satellite: sat, 
   onClose, 
@@ -76,11 +144,19 @@ export default function SelectedSatellitePanel({
   viewMode,
   isCameraLocked,
   setIsCameraLocked,
+  observerLocation,
 }) {
   const [showTle, setShowTle] = useState(false);
   const canvasRef = useRef(null);
   const historyRef = useRef([]); // holds { time, alt }
   const prevSatRef = useRef(null);
+
+  // Round simulation time to 5-minute increments for pass prediction performance
+  const roundedSimTime = Math.floor(simTime.getTime() / (5 * 60 * 1000));
+  const passes = useMemo(() => {
+    if (!observerLocation || !sat) return [];
+    return getUpcomingPasses(sat.tle1, sat.tle2, observerLocation, new Date(roundedSimTime * 5 * 60 * 1000));
+  }, [sat, observerLocation, roundedSimTime]);
 
   // Reset history if satellite changes
   if (prevSatRef.current !== sat) {
@@ -293,6 +369,61 @@ export default function SelectedSatellitePanel({
         )}
       </div>
 
+      {/* Observer & Pass Predictions */}
+      <div className="details-divider"></div>
+      <div className="details-section">
+        <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Compass size={12} className="section-icon" />
+          UPCOMING PASSES (24H)
+        </h3>
+        {observerLocation ? (
+          <div>
+            <div className="observer-info-box" style={{ fontSize: '11px', color: '#8fa0b5', marginBottom: '8px', background: 'rgba(26,48,80,0.2)', padding: '6px', borderRadius: '4px' }}>
+              Observer: <strong>{observerLocation.name}</strong> ({observerLocation.lat.toFixed(4)}°, {observerLocation.lng.toFixed(4)}°)
+            </div>
+            {passes && passes.length > 0 ? (
+              <table className="details-table passes-table" style={{ width: '100%' }}>
+                <thead>
+                  <tr style={{ color: '#8fa0b5', fontSize: '9px' }}>
+                    <th style={{ textAlign: 'left', paddingBottom: '4px' }}>RISE TIME (LOCAL)</th>
+                    <th style={{ textAlign: 'center', paddingBottom: '4px' }}>MAX ELEV</th>
+                    <th style={{ textAlign: 'right', paddingBottom: '4px' }}>DURATION</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {passes.map((pass, index) => {
+                    const durationMs = pass.setTime.getTime() - pass.riseTime.getTime();
+                    const durMins = Math.floor(durationMs / 60000);
+                    const durSecs = Math.round((durationMs % 60000) / 1000);
+                    return (
+                      <tr key={index}>
+                        <td style={{ fontSize: '11px', padding: '3px 0' }}>
+                          {pass.riseTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </td>
+                        <td style={{ textAlign: 'center', fontWeight: '600', color: pass.maxElevation > 45 ? '#00c853' : pass.maxElevation > 25 ? '#e0e6ed' : '#5a7a9a', padding: '3px 0' }}>
+                          {Math.round(pass.maxElevation)}°
+                        </td>
+                        <td style={{ textAlign: 'right', fontSize: '11px', padding: '3px 0' }} className="font-numeric">
+                          {durMins}m {durSecs}s
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <p className="metric-loading" style={{ fontSize: '11px', color: '#5a7a9a', margin: 0 }}>
+                No passes visible in the next 24 hours.
+              </p>
+            )}
+          </div>
+        ) : (
+          <p className="metric-loading" style={{ fontSize: '11px', color: '#5a7a9a', margin: 0 }}>
+            Set observer location in the sidebar to calculate pass predictions.
+          </p>
+        )}
+      </div>
+
       <div className="details-divider"></div>
 
       {/* Keplerian Elements & Designators */}
@@ -350,6 +481,44 @@ export default function SelectedSatellitePanel({
           <p className="metric-loading">No orbital data available.</p>
         )}
       </div>
+
+      {/* Radio & Mission Info for LAPAN-A2 (IO-86) */}
+      {(sat.name.includes('LAPAN-A2') || (kep && kep.noradId === '40931')) && (
+        <>
+          <div className="details-divider"></div>
+          <div className="details-section">
+            <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Radio size={12} className="section-icon" style={{ color: color }} />
+              LAPAN-A2 (IO-86) RADIO CHANNELS
+            </h3>
+            <table className="details-table">
+              <tbody>
+                <tr>
+                  <td>Voice Repeater (FM)</td>
+                  <td>
+                    <strong>Uplink:</strong> 145.880 MHz (PL 88.5 Hz)<br />
+                    <strong>Downlink:</strong> 435.880 MHz
+                  </td>
+                </tr>
+                <tr>
+                  <td>APRS / Telemetry (simplex)</td>
+                  <td>
+                    <strong>Freq:</strong> 145.825 MHz (1200 bps AFSK)
+                  </td>
+                </tr>
+                <tr>
+                  <td>Operator / Country</td>
+                  <td>LAPAN & ORARI / Indonesia 🇮🇩</td>
+                </tr>
+                <tr>
+                  <td>Primary Mission</td>
+                  <td>AIS Ship tracking, Disaster APRS, FM Voice Repeater</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       <div className="details-divider"></div>
 

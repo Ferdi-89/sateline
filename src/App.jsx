@@ -41,6 +41,33 @@ function parseTLE(text, category) {
   return sats;
 }
 
+// Fetch LAPAN-A2 from SatNOGS DB API with a local fallback TLE
+async function fetchLapanA2() {
+  const fallback = [{
+    name: 'LAPAN-A2 (IO-86)',
+    tle1: '1 40931U          26165.13411713  .00000000  00000-0  77536-4 0    03',
+    tle2: '2 40931   6.0006 190.4965 0012733 338.8432 279.4005 14.79261912    01',
+    category: 'other',
+  }];
+  try {
+    const res = await fetch('https://db.satnogs.org/api/tle/?norad_cat_id=40931');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.length > 0) {
+        return [{
+          name: (data[0].tle0 || 'LAPAN-A2') + ' (IO-86)',
+          tle1: data[0].tle1,
+          tle2: data[0].tle2,
+          category: 'other',
+        }];
+      }
+    }
+  } catch (err) {
+    console.warn('Unable to reach SatNOGS DB API for LAPAN-A2, using fallback TLE:', err);
+  }
+  return fallback;
+}
+
 function App() {
   const [allSatellites, setAllSatellites] = useState([]);
   const [selectedSatellite, setSelectedSatellite] = useState(null);
@@ -49,6 +76,10 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('2d'); // '2d' | '3d'
   const [isCameraLocked, setIsCameraLocked] = useState(false);
+  
+  // Observer location & pinning states
+  const [observerLocation, setObserverLocation] = useState(null);
+  const [isPinMode, setIsPinMode] = useState(false);
   
   // Time Simulation State
   const [isPaused, setIsPaused] = useState(false);
@@ -85,8 +116,8 @@ function App() {
     const fetchAll = async () => {
       setLoading(true);
       try {
-        const results = await Promise.all(
-          GROUPS.map(async ({ group, category: cat, limit }) => {
+        const results = await Promise.all([
+          ...GROUPS.map(async ({ group, category: cat, limit }) => {
             try {
               const res = await fetch(
                 `https://celestrak.org/NORAD/elements/gp.php?GROUP=${group}&FORMAT=tle`
@@ -99,8 +130,9 @@ function App() {
             } catch {
               return [];
             }
-          })
-        );
+          }),
+          fetchLapanA2()
+        ]);
         // Merge all groups; deduplicate by name
         const seen = new Set();
         const merged = [];
@@ -152,6 +184,10 @@ function App() {
             simTime={simTime}
             isPaused={isPaused}
             timeMultiplier={timeMultiplier}
+            observerLocation={observerLocation}
+            onSetObserverLocation={setObserverLocation}
+            isPinMode={isPinMode}
+            onSetPinMode={setIsPinMode}
           />
         ) : (
           <Suspense fallback={
@@ -168,6 +204,10 @@ function App() {
               isPaused={isPaused}
               timeMultiplier={timeMultiplier}
               isCameraLocked={isCameraLocked}
+              observerLocation={observerLocation}
+              onSetObserverLocation={setObserverLocation}
+              isPinMode={isPinMode}
+              onSetPinMode={setIsPinMode}
             />
           </Suspense>
         )}
@@ -200,6 +240,7 @@ function App() {
           viewMode={viewMode}
           isCameraLocked={isCameraLocked}
           setIsCameraLocked={setIsCameraLocked}
+          observerLocation={observerLocation}
         />
       )}
 
@@ -213,6 +254,10 @@ function App() {
         setSearchQuery={setSearchQuery}
         selectedSatellite={selectedSatellite}
         onSelectSatellite={setSelectedSatellite}
+        observerLocation={observerLocation}
+        onSetObserverLocation={setObserverLocation}
+        isPinMode={isPinMode}
+        onSetPinMode={setIsPinMode}
       />
 
       {/* Bottom-right legend */}

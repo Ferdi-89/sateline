@@ -14,6 +14,8 @@ import {
   CallbackProperty,
   JulianDate,
   ColorMaterialProperty,
+  Cartographic,
+  Math as CesiumMath,
 } from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import * as satellite from 'satellite.js';
@@ -92,6 +94,10 @@ export default function CesiumMapView({
   isPaused,
   timeMultiplier,
   isCameraLocked,
+  observerLocation,
+  onSetObserverLocation,
+  isPinMode,
+  onSetPinMode,
 }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
@@ -106,10 +112,20 @@ export default function CesiumMapView({
   const selectedRef = useRef(null);
   const onSelectRef = useRef(onSelectSatellite);
   const isCameraLockedRef = useRef(isCameraLocked);
+  
+  // Refs for tracking observer location & pin mode
+  const observerLocationRef = useRef(observerLocation);
+  const isPinModeRef = useRef(isPinMode);
+  const onSetObserverLocationRef = useRef(onSetObserverLocation);
+  const onSetPinModeRef = useRef(onSetPinMode);
 
   useEffect(() => { selectedRef.current = selectedSatellite; }, [selectedSatellite]);
   useEffect(() => { onSelectRef.current = onSelectSatellite; }, [onSelectSatellite]);
   useEffect(() => { isCameraLockedRef.current = isCameraLocked; }, [isCameraLocked]);
+  useEffect(() => { observerLocationRef.current = observerLocation; }, [observerLocation]);
+  useEffect(() => { isPinModeRef.current = isPinMode; }, [isPinMode]);
+  useEffect(() => { onSetObserverLocationRef.current = onSetObserverLocation; }, [onSetObserverLocation]);
+  useEffect(() => { onSetPinModeRef.current = onSetPinMode; }, [onSetPinMode]);
 
   // Keep a frozen snapshot of the satellites array for the render loop
   useEffect(() => { satsSnapshotRef.current = satellites; }, [satellites]);
@@ -195,9 +211,24 @@ export default function CesiumMapView({
 
     viewerRef.current = viewer;
 
-    // Click handler for picking satellites
+    // Click handler for picking satellites or pinning map
     const handler = new ScreenSpaceEventHandler(viewer.scene.canvas);
     handler.setInputAction((click) => {
+      if (isPinModeRef.current) {
+        const cartesian = viewer.camera.pickEllipsoid(click.position, viewer.scene.globe.ellipsoid);
+        if (defined(cartesian)) {
+          const cartographic = Cartographic.fromCartesian(cartesian);
+          const lng = CesiumMath.toDegrees(cartographic.longitude);
+          const lat = CesiumMath.toDegrees(cartographic.latitude);
+          onSetObserverLocationRef.current({
+            lat: Math.max(-85, Math.min(85, lat)),
+            lng: Math.max(-180, Math.min(180, lng)),
+            name: 'Dropped Pin',
+          });
+          onSetPinModeRef.current(false);
+        }
+        return;
+      }
       const pickedObject = viewer.scene.pick(click.position);
       if (defined(pickedObject) && pickedObject.primitive && pickedObject.primitive.id) {
         onSelectRef.current(pickedObject.primitive.id);
@@ -450,6 +481,80 @@ export default function CesiumMapView({
       }
     };
   }, [selectedSatellite]);
+
+  /* ── Track Observer Pin & Footprint ─────────────────────── */
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+
+    viewer.entities.removeById('observer-pin');
+    viewer.entities.removeById('observer-horizon');
+
+    if (!observerLocation) return;
+
+    // Add observer pin
+    viewer.entities.add({
+      id: 'observer-pin',
+      position: Cartesian3.fromDegrees(observerLocation.lng, observerLocation.lat, 200.0),
+      point: {
+        pixelSize: 8,
+        color: Color.RED,
+        outlineColor: Color.WHITE,
+        outlineWidth: 2,
+      },
+      label: {
+        text: observerLocation.name || 'OBSERVER',
+        font: '10px Inter, sans-serif',
+        fillColor: Color.RED,
+        outlineColor: Color.BLACK,
+        outlineWidth: 2,
+        style: 2, // Fill and Outline
+        verticalOrigin: 1, // Bottom
+        pixelOffset: new Cartesian3(0.0, -12.0, 0.0),
+      }
+    });
+
+    // Calculate footprint radius in meters
+    let footprintRadius = 1800000; // in meters (default LEO ~1800km)
+    if (selectedSatellite) {
+      const cache = satrecCacheRef.current;
+      const key = selectedSatellite.tle1 + selectedSatellite.tle2;
+      const satrec = cache.get(key);
+      if (satrec) {
+        const pos = getSatPositionECF(satrec, localSimTimeRef.current);
+        if (pos) {
+          const R_earth = 6378137;
+          const el = 10 * Math.PI / 180;
+          const r = R_earth / (R_earth + pos.alt);
+          const psi = Math.acos(r * Math.cos(el)) - el;
+          footprintRadius = psi * R_earth;
+        }
+      }
+    }
+
+    // Add observer horizon footprint
+    viewer.entities.add({
+      id: 'observer-horizon',
+      position: Cartesian3.fromDegrees(observerLocation.lng, observerLocation.lat, 10.0),
+      ellipse: {
+        semiMajorAxis: footprintRadius,
+        semiMinorAxis: footprintRadius,
+        material: Color.fromCssColorString('#ff3d00').withAlpha(0.06),
+        outline: true,
+        outlineColor: Color.fromCssColorString('#ff3d00').withAlpha(0.55),
+        outlineWidth: 1.5,
+        height: 100.0,
+        granularity: 0.005,
+      }
+    });
+
+    return () => {
+      if (viewerRef.current && !viewerRef.current.isDestroyed()) {
+        viewerRef.current.entities.removeById('observer-pin');
+        viewerRef.current.entities.removeById('observer-horizon');
+      }
+    };
+  }, [observerLocation, selectedSatellite]);
 
   /* ── Render Orbit Polyline ────────────────────────────────── */
   useEffect(() => {

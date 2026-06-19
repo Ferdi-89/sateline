@@ -22,6 +22,43 @@ function project(lng, lat, mapW, mapH, offsetX = 0, offsetY = 0) {
   return [x, y];
 }
 
+/* ─── Draw spherical circle on Equirectangular projection ─── */
+function drawGeodesicCircle(ctx, centerLng, centerLat, radiusKm, mapW, mapH, offsetX, offsetY) {
+  const R_earth = 6371;
+  const d_rad = radiusKm / R_earth;
+  const lat_rad = centerLat * Math.PI / 180;
+  const lng_rad = centerLng * Math.PI / 180;
+  
+  const points = [];
+  for (let i = 0; i <= 64; i++) {
+    const angle = (i * 2 * Math.PI) / 64;
+    const pLat = Math.asin(
+      Math.sin(lat_rad) * Math.cos(d_rad) +
+      Math.cos(lat_rad) * Math.sin(d_rad) * Math.cos(angle)
+    );
+    const pLng = lng_rad + Math.atan2(
+      Math.sin(angle) * Math.sin(d_rad) * Math.cos(lat_rad),
+      Math.cos(d_rad) - Math.sin(lat_rad) * Math.sin(pLat)
+    );
+    
+    const pLngDeg = (pLng * 180 / Math.PI + 180 + 360) % 360 - 180;
+    const pLatDeg = pLat * 180 / Math.PI;
+    points.push([pLngDeg, pLatDeg]);
+  }
+  
+  const segments = splitRingAtAntimeridian(points);
+  segments.forEach(seg => {
+    ctx.beginPath();
+    const first = project(seg[0][0], seg[0][1], mapW, mapH, offsetX, offsetY);
+    ctx.moveTo(first[0], first[1]);
+    for (let i = 1; i < seg.length; i++) {
+      const pt = project(seg[i][0], seg[i][1], mapW, mapH, offsetX, offsetY);
+      ctx.lineTo(pt[0], pt[1]);
+    }
+    ctx.stroke();
+  });
+}
+
 /* ─── Split a ring at antimeridian crossings ─────────────── */
 function splitRingAtAntimeridian(ring) {
   if (ring.length < 2) return [ring];
@@ -119,6 +156,10 @@ export default function MapView({
   simTime,
   isPaused,
   timeMultiplier,
+  observerLocation,
+  onSetObserverLocation,
+  isPinMode,
+  onSetPinMode,
 }) {
   const canvasRef      = useRef(null);
   const topoDataRef    = useRef(null);
@@ -130,6 +171,17 @@ export default function MapView({
   const lastFrameRef   = useRef(0);
   const satrecCache    = useRef(new Map());
   const sizeRef        = useRef({ W: 0, H: 0, mapW: 0, mapH: 0, offsetX: 0, offsetY: 0 });
+
+  // Refs for tracking observer location & pin mode
+  const observerRef = useRef(observerLocation);
+  const isPinModeRef = useRef(isPinMode);
+  const onSetObserverLocationRef = useRef(onSetObserverLocation);
+  const onSetPinModeRef = useRef(onSetPinMode);
+
+  useEffect(() => { observerRef.current = observerLocation; }, [observerLocation]);
+  useEffect(() => { isPinModeRef.current = isPinMode; }, [isPinMode]);
+  useEffect(() => { onSetObserverLocationRef.current = onSetObserverLocation; }, [onSetObserverLocation]);
+  useEffect(() => { onSetPinModeRef.current = onSetPinMode; }, [onSetPinMode]);
 
   // Refs for tracking simulation time
   const simTimeRef = useRef(simTime);
@@ -369,6 +421,54 @@ export default function MapView({
       }
     }
 
+    /* 5b — Observer pin and horizon footprint circle */
+    const obs = observerRef.current;
+    if (obs) {
+      const [ox, oy] = project(obs.lng, obs.lat, mapW, mapH, offsetX, offsetY);
+      
+      // Calculate horizon footprint radius
+      let footprintRadius = 1800; // default LEO coverage ~1800km
+      if (sel) {
+        const key = sel.tle1 + sel.tle2;
+        const satrec = satrecCache.current.get(key);
+        if (satrec) {
+          const pos = getSatPosition(satrec, localSimTime, mapW, mapH, offsetX, offsetY);
+          if (pos) {
+            const R_earth = 6371;
+            const el = 10 * Math.PI / 180; // 10 degree elevation threshold
+            const r = R_earth / (R_earth + pos.alt);
+            const psi = Math.acos(r * Math.cos(el)) - el;
+            footprintRadius = psi * R_earth;
+          }
+        }
+      }
+      
+      // Draw Geodesic footprint circle around observer (red dashed)
+      ctx.strokeStyle = 'rgba(255, 61, 0, 0.45)';
+      ctx.lineWidth = 1.2 / scale;
+      ctx.setLineDash([4 / scale, 4 / scale]);
+      drawGeodesicCircle(ctx, obs.lng, obs.lat, footprintRadius, mapW, mapH, offsetX, offsetY);
+      ctx.setLineDash([]);
+      
+      // Draw Observer Target Pin
+      ctx.beginPath();
+      ctx.arc(ox, oy, 6 / scale, 0, Math.PI * 2);
+      ctx.strokeStyle = '#ff3d00';
+      ctx.lineWidth = 1.5 / scale;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(ox, oy, 1.5 / scale, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff3d00';
+      ctx.fill();
+      
+      // Label "OBSERVER"
+      ctx.fillStyle = '#ff3d00';
+      ctx.font = `${Math.max(8, Math.round(10 / scale))}px Inter, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText("OBSERVER", ox, oy - 10 / scale);
+    }
+
     /* 6 — Satellite dots */
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform to screen space
@@ -520,6 +620,26 @@ export default function MapView({
 
       const { scale, tx, ty } = xfRef.current;
       const { mapW, mapH, offsetX, offsetY } = sizeRef.current;
+
+      // Handle map pinning if pinMode is active
+      if (isPinModeRef.current) {
+        const mapX = (clickX - tx) / scale;
+        const mapY = (clickY - ty) / scale;
+        const lng = ((mapX - offsetX) / mapW) * 360 - 180;
+        const lat = 90 - ((mapY - offsetY) / mapH) * 180;
+        
+        // Clamp values
+        const clampedLat = Math.max(-85, Math.min(85, lat));
+        const clampedLng = Math.max(-180, Math.min(180, lng));
+        
+        onSetObserverLocationRef.current({
+          lat: clampedLat,
+          lng: clampedLng,
+          name: 'Dropped Pin',
+        });
+        onSetPinModeRef.current(false);
+        return;
+      }
 
       let nearestSat = null;
       let minDist = 15; // click range
