@@ -496,27 +496,40 @@ export default function SelectedSatellitePanel({
         {observerLocation ? (
           lookAngles ? (
             <div className="sky-radar-container">
+              {/* Status Banner */}
+              <div className={`sky-radar-status-banner ${lookAngles.elevation >= 0 ? 'visible' : 'below'}`}>
+                {lookAngles.elevation >= 0 ? (
+                  <>
+                    <span className="live-dot-green"></span>
+                    <span>SATELLITE VISIBLE / TERLIHAT</span>
+                  </>
+                ) : (
+                  <span>BELOW HORIZON / DI BAWAH UFUK</span>
+                )}
+              </div>
+
+              {/* Centered SVG Radar */}
               <svg className="sky-radar-svg" viewBox="0 0 100 100">
                 {/* Compass Dial */}
-                <circle cx="50" cy="50" r="44" className="radar-ring horizon" />
-                <circle cx="50" cy="50" r="29" className="radar-ring mid-el" />
-                <circle cx="50" cy="50" r="14" className="radar-ring high-el" />
+                <circle cx="50" cy="50" r="36" className="radar-ring horizon" />
+                <circle cx="50" cy="50" r="24" className="radar-ring mid-el" />
+                <circle cx="50" cy="50" r="12" className="radar-ring high-el" />
                 
                 {/* Crosshairs */}
-                <line x1="50" y1="6" x2="50" y2="94" className="radar-axis" />
-                <line x1="6" y1="50" x2="94" y2="50" className="radar-axis" />
+                <line x1="50" y1="14" x2="50" y2="86" className="radar-axis" />
+                <line x1="14" y1="50" x2="86" y2="50" className="radar-axis" />
                 
-                {/* Cardinal Directions */}
-                <text x="50" y="12" className="radar-cardinal">U</text>
-                <text x="89" y="53" className="radar-cardinal">T</text>
-                <text x="50" y="93" className="radar-cardinal">S</text>
-                <text x="11" y="53" className="radar-cardinal">B</text>
+                {/* Cardinal Directions (positioned fully outside the 36-radius circle) */}
+                <text x="50" y="9" className="radar-cardinal">U</text>
+                <text x="94" y="53" className="radar-cardinal">T</text>
+                <text x="50" y="97" className="radar-cardinal">S</text>
+                <text x="6" y="53" className="radar-cardinal">B</text>
                 
                 {/* Heading Line */}
                 {(() => {
                   const azRad = (lookAngles.azimuth * Math.PI) / 180;
-                  const x2 = 50 + 44 * Math.sin(azRad);
-                  const y2 = 50 - 44 * Math.cos(azRad);
+                  const x2 = 50 + 36 * Math.sin(azRad);
+                  const y2 = 50 - 36 * Math.cos(azRad);
                   return (
                     <line 
                       x1="50" 
@@ -532,8 +545,8 @@ export default function SelectedSatellitePanel({
                 {(() => {
                   const el = lookAngles.elevation;
                   const r = el >= 0 
-                    ? ((90 - el) / 90) * 44 
-                    : 44; // Lock to horizon if below
+                    ? ((90 - el) / 90) * 36 
+                    : 36; // Lock to horizon if below
                   const azRad = ((lookAngles.azimuth - 90) * Math.PI) / 180;
                   const cx = 50 + r * Math.cos(azRad);
                   const cy = 50 + r * Math.sin(azRad);
@@ -541,36 +554,40 @@ export default function SelectedSatellitePanel({
                     <circle 
                       cx={cx} 
                       cy={cy} 
-                      r={el >= 0 ? 4 : 3.5} 
+                      r={el >= 0 ? 3.5 : 3} 
                       className={`radar-sat-marker ${el >= 0 ? 'visible' : 'below-horizon'}`} 
                     />
                   );
                 })()}
               </svg>
 
-              <div className="sky-radar-info">
-                <div className="radar-metric">
-                  <span className="radar-metric-label">AZIMUTH</span>
-                  <span className="radar-metric-val font-numeric">
-                    {Math.round(lookAngles.azimuth)}° <span className="radar-cardinal-sub">{getCardinalDirection(lookAngles.azimuth)}</span>
+              {/* Telemetry Metrics Grid */}
+              <div className="radar-metrics-grid">
+                <div className="radar-metric-box">
+                  <span className="radar-metric-box-label">AZIMUTH</span>
+                  <span className="radar-metric-box-val font-numeric">
+                    {Math.round(lookAngles.azimuth)}°
                   </span>
+                  <span className="radar-cardinal-sub">{getCardinalDirection(lookAngles.azimuth)}</span>
                 </div>
-                <div className="radar-metric">
-                  <span className="radar-metric-label">ELEVASI / ELEV</span>
-                  <span className="radar-metric-val font-numeric" style={{ color: lookAngles.elevation >= 0 ? '#00c853' : '#ff3d00' }}>
+                
+                <div className="radar-metric-box">
+                  <span className="radar-metric-box-label">ELEVASI / ELEV</span>
+                  <span className="radar-metric-box-val font-numeric" style={{ color: lookAngles.elevation >= 0 ? '#00c853' : '#ff3d00' }}>
                     {Math.round(lookAngles.elevation)}°
                   </span>
-                </div>
-                <div className="radar-metric">
-                  <span className="radar-metric-label">JARAK / RANGE</span>
-                  <span className="radar-metric-val font-numeric">
-                    {Math.round(lookAngles.range).toLocaleString()} km
+                  <span className="radar-cardinal-sub" style={{ color: lookAngles.elevation >= 0 ? '#00c853' : '#ff3d00', fontSize: '8px' }}>
+                    {lookAngles.elevation >= 0 ? 'VISIBLE' : 'LOS'}
                   </span>
                 </div>
                 
-                <span className={`radar-status-badge ${lookAngles.elevation >= 0 ? 'visible' : 'below'}`}>
-                  {lookAngles.elevation >= 0 ? '🛰️ TERLIHAT / VISIBLE' : '🛰️ DI BAWAH UFUK / BELOW'}
-                </span>
+                <div className="radar-metric-box">
+                  <span className="radar-metric-box-label">JARAK / RANGE</span>
+                  <span className="radar-metric-box-val font-numeric">
+                    {Math.round(lookAngles.range).toLocaleString()}
+                  </span>
+                  <span className="radar-cardinal-sub">km</span>
+                </div>
               </div>
             </div>
           ) : (
