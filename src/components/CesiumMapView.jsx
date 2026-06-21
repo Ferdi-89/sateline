@@ -175,6 +175,9 @@ export default function CesiumMapView({
     viewer.scene.fog.enabled = false;
     viewer.scene.backgroundColor = Color.fromCssColorString('#050e1a');
 
+    // Allow the camera to rotate freely in any direction over the poles (trackball rotation)
+    viewer.camera.constrainedAxis = undefined;
+
     // Remove default imagery and use CartoDB Dark Matter
     viewer.imageryLayers.removeAll();
     try {
