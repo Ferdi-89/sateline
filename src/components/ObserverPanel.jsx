@@ -1,7 +1,7 @@
 import React from 'react';
 import { Navigation, MapPin, Trash2, Compass, Radio, AlertCircle } from 'lucide-react';
 
-export default function ObserverPanel({
+function ObserverPanel({
   observerLocation,
   onSetObserverLocation,
   isPinMode,
@@ -123,3 +123,5 @@ export default function ObserverPanel({
     </div>
   );
 }
+
+export default React.memo(ObserverPanel);

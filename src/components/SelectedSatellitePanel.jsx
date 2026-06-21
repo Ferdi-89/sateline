@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import * as satellite from 'satellite.js';
 import { X, Globe, Compass, Code, Activity, Target, Radio } from 'lucide-react';
 
@@ -48,7 +48,7 @@ function parseTLEDetails(tle1, tle2) {
       meanMotion: meanMotion.toFixed(8) + ' rev/day',
       periodStr,
     };
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -171,12 +171,16 @@ function getUpcomingPasses(tle1, tle2, observerLocation, simTime) {
     let inPass = false;
     let currentPass = null;
 
-    // Scan 24 hours in steps of 30 seconds
-    const stepSeconds = 30;
+    // Scan 24 hours in steps of 120 seconds (720 steps instead of 2880)
+    // This is 4x faster and more than enough to capture LEO passes
+    const stepSeconds = 120;
     const totalSteps = (24 * 3600) / stepSeconds;
 
+    const time = new Date(simTime);
+    const simTimeMs = simTime.getTime();
+
     for (let step = 0; step < totalSteps; step++) {
-      const time = new Date(simTime.getTime() + step * stepSeconds * 1000);
+      time.setTime(simTimeMs + step * stepSeconds * 1000);
       const positionAndVelocity = satellite.propagate(satrec, time);
       if (!positionAndVelocity.position) continue;
 
@@ -189,22 +193,61 @@ function getUpcomingPasses(tle1, tle2, observerLocation, simTime) {
       if (elevation >= 10) { // 10 degree elevation threshold
         if (!inPass) {
           inPass = true;
+          // Refine rise time using a fine linear search (backwards up to 120s in 15s steps)
+          let refinedRiseTime = new Date(time);
+          const tempTime = new Date(time);
+          for (let offsetSec = 15; offsetSec < 120; offsetSec += 15) {
+            tempTime.setTime(time.getTime() - offsetSec * 1000);
+            const pv = satellite.propagate(satrec, tempTime);
+            if (pv.position) {
+              const g = satellite.gstime(tempTime);
+              const pe = satellite.eciToEcf(pv.position, g);
+              const la = satellite.ecfToLookAngles(observerGeodetic, pe);
+              const el = la.elevation * (180 / Math.PI);
+              if (el >= 10) {
+                refinedRiseTime.setTime(tempTime.getTime());
+              } else {
+                break; // found the edge
+              }
+            }
+          }
+
           currentPass = {
-            riseTime: time,
+            riseTime: refinedRiseTime,
             maxElevation: elevation,
-            maxElevationTime: time,
+            maxElevationTime: new Date(time),
             setTime: null,
           };
         } else {
           if (elevation > currentPass.maxElevation) {
             currentPass.maxElevation = elevation;
-            currentPass.maxElevationTime = time;
+            currentPass.maxElevationTime = new Date(time);
           }
         }
       } else {
         if (inPass) {
           inPass = false;
-          currentPass.setTime = time;
+          
+          // Refine set time using a fine linear search (backwards up to 120s in 15s steps)
+          let refinedSetTime = new Date(time.getTime() - 120 * 1000); // start from last known in-pass time
+          const tempTime = new Date(time);
+          for (let offsetSec = 105; offsetSec >= 0; offsetSec -= 15) {
+            tempTime.setTime(time.getTime() - offsetSec * 1000);
+            const pv = satellite.propagate(satrec, tempTime);
+            if (pv.position) {
+              const g = satellite.gstime(tempTime);
+              const pe = satellite.eciToEcf(pv.position, g);
+              const la = satellite.ecfToLookAngles(observerGeodetic, pe);
+              const el = la.elevation * (180 / Math.PI);
+              if (el >= 10) {
+                refinedSetTime.setTime(tempTime.getTime());
+              } else {
+                break; // crossed out of pass
+              }
+            }
+          }
+
+          currentPass.setTime = refinedSetTime;
           passes.push(currentPass);
           currentPass = null;
           if (passes.length >= 5) break;
@@ -235,7 +278,7 @@ export default function SelectedSatellitePanel({
   const [showTle, setShowTle] = useState(false);
   const canvasRef = useRef(null);
   const historyRef = useRef([]); // holds { time, alt }
-  const prevSatRef = useRef(null);
+
 
   // Round simulation time to 5-minute increments for pass prediction performance
   const roundedSimTime = Math.floor(simTime.getTime() / (5 * 60 * 1000));
@@ -243,12 +286,6 @@ export default function SelectedSatellitePanel({
     if (!observerLocation || !sat) return [];
     return getUpcomingPasses(sat.tle1, sat.tle2, observerLocation, new Date(roundedSimTime * 5 * 60 * 1000));
   }, [sat, observerLocation, roundedSimTime]);
-
-  // Reset history if satellite changes
-  if (prevSatRef.current !== sat) {
-    historyRef.current = [];
-    prevSatRef.current = sat;
-  }
 
   // Calculate live telemetry metrics using current simulated time
   let liveProps = null;
@@ -276,24 +313,12 @@ export default function SelectedSatellitePanel({
         speedSec: speedKmS.toFixed(3) + ' km/s',
       };
     }
-  } catch (err) {
+  } catch {
     // Ignore propagation errors
   }
 
-  // Record history point for sparkline
-  useEffect(() => {
-    if (liveProps && rawAlt > 0) {
-      const history = historyRef.current;
-      history.push(rawAlt);
-      if (history.length > 40) {
-        history.shift();
-      }
-      drawSparkline();
-    }
-  }, [simTime, sat]);
-
   // Draw the telemetry sparkline graph
-  const drawSparkline = () => {
+  const drawSparkline = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -372,7 +397,26 @@ export default function SelectedSatellitePanel({
     ctx.strokeStyle = accentColor + '88';
     ctx.lineWidth = 1;
     ctx.stroke();
-  };
+  }, [sat]);
+
+  const lastSatRef = useRef(sat);
+
+  // Record history point for sparkline
+  useEffect(() => {
+    if (lastSatRef.current !== sat) {
+      historyRef.current = [];
+      lastSatRef.current = sat;
+    }
+
+    if (liveProps && rawAlt > 0) {
+      const history = historyRef.current;
+      history.push(rawAlt);
+      if (history.length > 40) {
+        history.shift();
+      }
+      drawSparkline();
+    }
+  }, [simTime, sat, liveProps, rawAlt, drawSparkline]);
 
   const color = CATEGORY_COLORS[sat.category] || CATEGORY_COLORS.other;
   const kep = parseTLEDetails(sat.tle1, sat.tle2);
@@ -404,7 +448,7 @@ export default function SelectedSatellitePanel({
           range: range,
         };
       }
-    } catch (e) {
+    } catch {
       // Ignore propagation errors
     }
   }

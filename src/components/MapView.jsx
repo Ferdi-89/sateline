@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { feature } from 'topojson-client';
 import * as satellite from 'satellite.js';
 
@@ -114,11 +114,10 @@ function buildCountrySegments(topoData, mapW, mapH, offsetX, offsetY) {
 }
 
 /* ─── Compute satellite lat/lng/xy at a given time ──────── */
-function getSatPosition(satrec, time, mapW, mapH, offsetX, offsetY) {
+function getSatPosition(satrec, time, gmst, mapW, mapH, offsetX, offsetY) {
   try {
     const pv = satellite.propagate(satrec, time);
     if (!pv || !pv.position) return null;
-    const gmst = satellite.gstime(time);
     const gd   = satellite.eciToGeodetic(pv.position, gmst);
     const lng  = satellite.degreesLong(gd.longitude);
     const lat  = satellite.degreesLat(gd.latitude);
@@ -133,7 +132,7 @@ function computeOrbit(satrec, now, mapW, mapH, offsetX, offsetY) {
   let prevLng = null;
   for (let m = -90; m <= 90; m += 0.5) {
     const t = new Date(now.getTime() + m * 60_000);
-    const pos = getSatPosition(satrec, t, mapW, mapH, offsetX, offsetY);
+    const pos = getSatPosition(satrec, t, satellite.gstime(t), mapW, mapH, offsetX, offsetY);
     if (!pos) { 
       if (segments[segments.length-1].length) segments.push([]); 
       prevLng = null; 
@@ -262,8 +261,8 @@ export default function MapView({
   }, [selectedSatellite]);
 
   /* ── Main draw loop ─────────────────────────────────────── */
-  const draw = useCallback((ts) => {
-    rafRef.current = requestAnimationFrame(draw);
+  const draw = useCallback(function drawFunc(ts) {
+    rafRef.current = requestAnimationFrame(drawFunc);
 
     // Calculate time delta for simulated time
     const nowReal = performance.now();
@@ -283,6 +282,7 @@ export default function MapView({
       }
     }
     localSimTimeRef.current = localSimTime;
+    const gmst = satellite.gstime(localSimTime);
 
     // Frame rate check
     if (ts - lastFrameRef.current < FRAME_MS) return;
@@ -370,7 +370,7 @@ export default function MapView({
       const cache = satrecCache.current;
       const satrec = cache.get(key);
       if (satrec) {
-        const pos = getSatPosition(satrec, localSimTime, mapW, mapH, offsetX, offsetY);
+        const pos = getSatPosition(satrec, localSimTime, gmst, mapW, mapH, offsetX, offsetY);
         if (pos) {
           const [cx, cy] = pos.xy;
           const R_earth = 6371; // Earth radius in km
@@ -432,7 +432,7 @@ export default function MapView({
         const key = sel.tle1 + sel.tle2;
         const satrec = satrecCache.current.get(key);
         if (satrec) {
-          const pos = getSatPosition(satrec, localSimTime, mapW, mapH, offsetX, offsetY);
+          const pos = getSatPosition(satrec, localSimTime, gmst, mapW, mapH, offsetX, offsetY);
           if (pos) {
             const R_earth = 6371;
             const el = 10 * Math.PI / 180; // 10 degree elevation threshold
@@ -476,7 +476,7 @@ export default function MapView({
     const sizeMul = Math.max(0.75, Math.min(3.5, Math.sqrt(scale)));
     
     satsRef.current.forEach(sat => {
-      const pos = getSatPosition(sat.satrec, localSimTime, mapW, mapH, offsetX, offsetY);
+      const pos = getSatPosition(sat.satrec, localSimTime, gmst, mapW, mapH, offsetX, offsetY);
       if (!pos) return;
       const [x, y] = pos.xy;
       
@@ -598,7 +598,6 @@ export default function MapView({
     // Touch handlers (Drag & Pinch zoom)
     let startTouchDist = null;
     let startScale = 1;
-    let startCenter = { x: 0, y: 0 };
 
     const getTouchDistAndCenter = (touches) => {
       const t1 = touches[0];
@@ -625,10 +624,9 @@ export default function MapView({
       } else if (e.touches.length === 2) {
         // Multi-touch: start pinch zoom
         isDraggingRef.current = false; // Disable dragging
-        const { dist, center } = getTouchDistAndCenter(e.touches);
+        const { dist } = getTouchDistAndCenter(e.touches);
         startTouchDist = dist;
         startScale = xfRef.current.scale;
-        startCenter = center;
       }
     };
 
@@ -731,8 +729,9 @@ export default function MapView({
       let nearestSat = null;
       let minDist = 15; // click range
 
+      const clickGmst = satellite.gstime(localSimTimeRef.current);
       satsRef.current.forEach(sat => {
-        const pos = getSatPosition(sat.satrec, localSimTimeRef.current, mapW, mapH, offsetX, offsetY);
+        const pos = getSatPosition(sat.satrec, localSimTimeRef.current, clickGmst, mapW, mapH, offsetX, offsetY);
         if (!pos) return;
         const [x, y] = pos.xy;
         const sx = x * scale + tx;

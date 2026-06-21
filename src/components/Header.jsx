@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { Globe, Map, Search, Compass } from 'lucide-react';
 
 function Header({ 

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   Viewer,
   Ion,
@@ -33,11 +33,10 @@ const DOT_SIZE = { station: 8, gps: 6, weather: 6, starlink: 4, other: 4 };
 const R_EARTH = 6378137; // Earth radius in meters
 
 /* ─── Satellite position helper ─────────────────────────── */
-function getSatPositionECF(satrec, time) {
+function getSatPositionECF(satrec, time, gmst) {
   try {
     const pv = satellite.propagate(satrec, time);
     if (!pv || !pv.position) return null;
-    const gmst = satellite.gstime(time);
     const gd = satellite.eciToGeodetic(pv.position, gmst);
     const lng = satellite.degreesLong(gd.longitude);
     const lat = satellite.degreesLat(gd.latitude);
@@ -65,7 +64,7 @@ function computeOrbitPositions(satrec, now) {
 
   for (let m = -90; m <= 90; m += 0.5) {
     const t = new Date(now.getTime() + m * 60_000);
-    const pos = getSatPositionECF(satrec, t);
+    const pos = getSatPositionECF(satrec, t, satellite.gstime(t));
     if (!pos) {
       if (segments[segments.length - 1].length) segments.push([]);
       prevLng = null;
@@ -269,6 +268,7 @@ export default function CesiumMapView({
       const cache = satrecCacheRef.current;
       const simDate = localSimTime;
       const sel = selectedRef.current;
+      const gmst = satellite.gstime(simDate);
 
       // Self-healing: rebuild points if count mismatch
       if (points.length !== sats.length) {
@@ -299,7 +299,7 @@ export default function CesiumMapView({
         const satrec = cache.get(key);
         if (!satrec) { pt.show = false; continue; }
 
-        const pos = getSatPositionECF(satrec, simDate);
+        const pos = getSatPositionECF(satrec, simDate, gmst);
         if (!pos) { pt.show = false; continue; }
 
         pt.show = true;
@@ -328,7 +328,7 @@ export default function CesiumMapView({
       if (!satrec) return;
 
       const date = localSimTimeRef.current;
-      const pos = getSatPositionECF(satrec, date);
+      const pos = getSatPositionECF(satrec, date, satellite.gstime(date));
       if (!pos) return;
 
       const satPos = Cartesian3.fromDegrees(pos.lng, pos.lat, pos.alt);
@@ -427,20 +427,20 @@ export default function CesiumMapView({
       id: 'selected-sat-footprint',
       position: new CallbackProperty((time, result) => {
         const date = JulianDate.toDate(time);
-        const pos = getSatPositionECF(satrec, date);
+        const pos = getSatPositionECF(satrec, date, satellite.gstime(date));
         if (!pos) return result;
         return Cartesian3.fromDegrees(pos.lng, pos.lat, 100.0, undefined, result);
       }, false),
       ellipse: {
         semiMajorAxis: new CallbackProperty((time) => {
           const date = JulianDate.toDate(time);
-          const pos = getSatPositionECF(satrec, date);
+          const pos = getSatPositionECF(satrec, date, satellite.gstime(date));
           if (!pos) return 100000;
           return getFootprintRadius(pos.alt);
         }, false),
         semiMinorAxis: new CallbackProperty((time) => {
           const date = JulianDate.toDate(time);
-          const pos = getSatPositionECF(satrec, date);
+          const pos = getSatPositionECF(satrec, date, satellite.gstime(date));
           if (!pos) return 100000;
           return getFootprintRadius(pos.alt);
         }, false),
@@ -461,7 +461,7 @@ export default function CesiumMapView({
       polyline: {
         positions: new CallbackProperty((time) => {
           const date = JulianDate.toDate(time);
-          const pos = getSatPositionECF(satrec, date);
+          const pos = getSatPositionECF(satrec, date, satellite.gstime(date));
           if (!pos) return [];
           return [
             Cartesian3.fromDegrees(pos.lng, pos.lat, pos.alt),
@@ -521,7 +521,7 @@ export default function CesiumMapView({
       const key = selectedSatellite.tle1 + selectedSatellite.tle2;
       const satrec = cache.get(key);
       if (satrec) {
-        const pos = getSatPositionECF(satrec, localSimTimeRef.current);
+          const pos = getSatPositionECF(satrec, localSimTimeRef.current, satellite.gstime(localSimTimeRef.current));
         if (pos) {
           const R_earth = 6378137;
           const el = 10 * Math.PI / 180;

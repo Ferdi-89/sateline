@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import MapView from './components/MapView';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -93,6 +93,7 @@ function App() {
   // Handle satellite selection (with auto-collapse sidebar on mobile)
   const handleSelectSatellite = (sat) => {
     setSelectedSatellite(sat);
+    setIsCameraLocked(false);
     if (sat && window.innerWidth <= 768) {
       setIsSidebarOpen(false);
     }
@@ -118,10 +119,7 @@ function App() {
     setIsPaused(false);
   };
 
-  // Reset camera lock when satellite selection changes
-  useEffect(() => {
-    setIsCameraLocked(false);
-  }, [selectedSatellite]);
+
 
   // Fetch multiple TLE groups in parallel and merge
   useEffect(() => {

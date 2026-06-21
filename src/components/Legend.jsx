@@ -22,4 +22,4 @@ function Legend({ isOpen = true }) {
   );
 }
 
-export default Legend;
+export default React.memo(Legend);

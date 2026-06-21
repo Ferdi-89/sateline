@@ -1,7 +1,7 @@
 import React from 'react';
 import { Play, Pause, RotateCcw } from 'lucide-react';
 
-export default function TimeControls({ isPaused, setIsPaused, timeMultiplier, setTimeMultiplier, onResetTime }) {
+function TimeControls({ isPaused, setIsPaused, timeMultiplier, setTimeMultiplier, onResetTime }) {
   const speeds = [
     { label: '1x', value: 1 },
     { label: '10x', value: 10 },
@@ -52,3 +52,5 @@ export default function TimeControls({ isPaused, setIsPaused, timeMultiplier, se
     </div>
   );
 }
+
+export default React.memo(TimeControls);
