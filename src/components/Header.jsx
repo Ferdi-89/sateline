@@ -1,5 +1,5 @@
 
-import { Globe, Map, Search, Compass } from 'lucide-react';
+import { Globe, Map, Search, Compass, Radio } from 'lucide-react';
 
 function Header({ 
   totalCount, 
@@ -11,6 +11,8 @@ function Header({
   setIsSidebarOpen,
   showObserverPanel,
   setShowObserverPanel,
+  showSdrPanel,
+  setShowSdrPanel,
 }) {
   const utc = simTime ? simTime.toISOString().slice(11, 19) + ' UTC' : 'N/A';
 
@@ -56,6 +58,16 @@ function Header({
                 <span className="btn-label">2D</span>
               </>
             )}
+          </button>
+
+          {/* SDR toggle button */}
+          <button
+            className={`view-toggle-btn ${showSdrPanel ? 'active-3d' : ''}`}
+            onClick={() => setShowSdrPanel(!showSdrPanel)}
+            title="Toggle SDR Monitor Console"
+          >
+            <Radio size={14} />
+            <span className="btn-label">SDR</span>
           </button>
 
           {/* Observer toggle button (visible on mobile, hides/shows observer dashboard) */}

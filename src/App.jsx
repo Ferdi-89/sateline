@@ -6,6 +6,7 @@ import Legend from './components/Legend';
 import SelectedSatellitePanel from './components/SelectedSatellitePanel';
 import TimeControls from './components/TimeControls';
 import ObserverPanel from './components/ObserverPanel';
+import SdrController from './components/SdrController';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Lazy-load CesiumMapView (heavy dependency ~30MB) only when user toggles to 3D
@@ -89,6 +90,9 @@ function App() {
   const [isPaused, setIsPaused] = useState(false);
   const [timeMultiplier, setTimeMultiplier] = useState(1);
   const [simTime, setSimTime] = useState(new Date());
+  
+  // SDR Panel Global Toggle State
+  const [showSdrPanel, setShowSdrPanel] = useState(false);
 
   // Handle satellite selection (with auto-collapse sidebar on mobile)
   const handleSelectSatellite = (sat) => {
@@ -256,6 +260,8 @@ function App() {
         setIsSidebarOpen={setIsSidebarOpen}
         showObserverPanel={showObserverPanel}
         setShowObserverPanel={setShowObserverPanel}
+        showSdrPanel={showSdrPanel}
+        setShowSdrPanel={setShowSdrPanel}
       />
 
       {/* Floating Observer Location Panel */}
@@ -267,6 +273,19 @@ function App() {
           onSetPinMode={setIsPinMode}
           isSidebarOpen={isSidebarOpen}
         />
+      )}
+
+      {/* Floating SDR Monitor Panel */}
+      {showSdrPanel && (
+        <div className={`sdr-panel-floating ${selectedSatellite ? 'shifted' : ''} ${isSidebarOpen ? '' : 'sidebar-collapsed'}`}>
+          <div className="sdr-panel-floating-header">
+            <h3>SDR MONITOR CONSOLE</h3>
+            <button className="sdr-panel-close-btn" onClick={() => setShowSdrPanel(false)} title="Close SDR Panel">✕</button>
+          </div>
+          <div className="sdr-panel-floating-body">
+            <SdrController satellite={selectedSatellite} simTime={simTime} />
+          </div>
+        </div>
       )}
 
       {/* Sidebar Toggle Button */}

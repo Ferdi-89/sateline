@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as satellite from 'satellite.js';
 import { X, Globe, Compass, Code, Activity, Target, Radio } from 'lucide-react';
+import SdrController from './SdrController';
 
 const CATEGORY_COLORS = {
   station:  '#00e5ff',
@@ -720,6 +721,13 @@ export default function SelectedSatellitePanel({
             Set observer location in map panel to calculate pass predictions.
           </p>
         )}
+      </div>
+
+      <div className="details-divider"></div>
+
+      {/* SDR & RTL-SDR Radio Control */}
+      <div className="details-section">
+        <SdrController satellite={sat} simTime={simTime} />
       </div>
 
       <div className="details-divider"></div>
