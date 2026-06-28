@@ -71,6 +71,56 @@ async function fetchLapanA2() {
   return fallback;
 }
 
+// Fetch NOAA 15, 18, and 19 satellites with local fallback TLEs
+async function fetchNoaaSatellites() {
+  const fallbacks = [
+    {
+      name: 'NOAA 15',
+      tle1: '1 25338U 98030A   26178.77233198  .00000093  00000-0  55528-4 0  9996',
+      tle2: '2 25338  98.5063 199.1188 0009415 322.1839  37.8679 14.27149413462804',
+      category: 'weather',
+    },
+    {
+      name: 'NOAA 18',
+      tle1: '1 28654U 05018A   26171.44845054  .00000038  00000-0  43006-4 0  9998',
+      tle2: '2 28654  98.8114 251.0782 0015040 138.7248 221.5065 14.13729855 86770',
+      category: 'weather',
+    },
+    {
+      name: 'NOAA 19',
+      tle1: '1 33591U 09005A   26177.25243725  .00000026  00000-0  37787-4 0  9992',
+      tle2: '2 33591  98.9518 248.1337 0013828   9.4119 350.7310 14.13475498895767',
+      category: 'weather',
+    }
+  ];
+
+  try {
+    const promises = fallbacks.map(async (sat) => {
+      const norad_id = sat.tle1.split(' ')[1].replace('U', '').trim();
+      try {
+        const res = await fetch(`https://db.satnogs.org/api/tle/?norad_cat_id=${norad_id}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.length > 0) {
+            return {
+              name: data[0].tle0 || sat.name,
+              tle1: data[0].tle1,
+              tle2: data[0].tle2,
+              category: 'weather',
+            };
+          }
+        }
+      } catch {
+        // Fallback on request error
+      }
+      return sat;
+    });
+    return await Promise.all(promises);
+  } catch (err) {
+    return fallbacks;
+  }
+}
+
 function App() {
   const [allSatellites, setAllSatellites] = useState([]);
   const [selectedSatellite, setSelectedSatellite] = useState(null);
@@ -145,7 +195,8 @@ function App() {
               return [];
             }
           }),
-          fetchLapanA2()
+          fetchLapanA2(),
+          fetchNoaaSatellites()
         ]);
         // Merge all groups; deduplicate by name
         const seen = new Set();
