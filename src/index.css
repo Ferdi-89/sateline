@@ -2685,7 +2685,148 @@ canvas.map-area {
   }
 }
 
+/* Decoder HUD Container */
+.sdr-decoder-hud {
+  margin-top: 10px;
+  background: rgba(10, 22, 40, 0.85);
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  border-radius: 4px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+}
 
+.decoder-hud-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(90, 122, 154, 0.2);
+  padding-bottom: 4px;
+  margin-bottom: 2px;
+}
 
+.decoder-hud-title h4 {
+  font-size: 0.62rem;
+  color: #00e5ff;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
 
+.decoder-hud-badge {
+  font-size: 0.5rem;
+  background: rgba(0, 229, 255, 0.15);
+  border: 1px solid #00e5ff;
+  color: #00e5ff;
+  border-radius: 2px;
+  padding: 1px 4px;
+  font-weight: bold;
+}
 
+/* Row containing details + canvas displays */
+.decoder-hud-body {
+  display: flex;
+  gap: 8px;
+}
+
+/* Left part: digital details */
+.decoder-hud-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.decoder-metric-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.58rem;
+  line-height: 1.2;
+}
+
+.decoder-metric-lbl {
+  color: #5a7a9a;
+}
+
+.decoder-metric-val {
+  color: #e0e6ed;
+  font-weight: 600;
+  font-family: inherit;
+}
+
+.decoder-metric-val.green {
+  color: #00ff88;
+}
+
+.decoder-metric-val.yellow {
+  color: #ffea00;
+}
+
+/* Right part: visual monitors */
+.decoder-hud-visuals {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.sdr-video-canvas {
+  background: #000;
+  border: 1px solid rgba(90, 122, 154, 0.3);
+  border-radius: 2px;
+  width: 110px;
+  height: 65px;
+}
+
+.sdr-constellation-canvas {
+  background: #000;
+  border: 1px solid rgba(90, 122, 154, 0.3);
+  border-radius: 2px;
+  width: 65px;
+  height: 65px;
+}
+
+/* Radio station marquee */
+.rds-marquee-container {
+  background: rgba(5, 14, 26, 0.9);
+  border: 1px solid rgba(90, 122, 154, 0.25);
+  border-radius: 2px;
+  padding: 3px 6px;
+  overflow: hidden;
+  position: relative;
+  height: 18px;
+  display: flex;
+  align-items: center;
+}
+
+.rds-station-name {
+  color: #ffea00;
+  font-size: 0.55rem;
+  font-weight: bold;
+  border-right: 1px solid rgba(90, 122, 154, 0.3);
+  padding-right: 6px;
+  margin-right: 6px;
+  white-space: nowrap;
+}
+
+.rds-text-scroll {
+  color: #00e5ff;
+  font-size: 0.55rem;
+  font-family: 'Courier New', Courier, monospace;
+  white-space: nowrap;
+  animation: rdsMarquee 15s linear infinite;
+  display: inline-block;
+}
+
+@keyframes rdsMarquee {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+
+/* Layout adjusting for presets list */
+.preset-section-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

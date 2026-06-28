@@ -154,16 +154,62 @@ def check_rtl_sdr_connection():
 
     return False
 
+def read_samples_from_rtl_sdr_bin(frequency, sample_rate, num_samples=256):
+    """
+    Fallback method to read raw IQ samples directly from the rtl_sdr command line utility.
+    This allows capturing real data even if pyrtlsdr python library is not installed.
+    """
+    rtl_sdr_path = shutil.which("rtl_sdr")
+    if not rtl_sdr_path:
+        return None
+        
+    # Each sample is 2 bytes (I and Q), so we need 2 * num_samples bytes
+    num_bytes = 2 * num_samples
+    try:
+        # Run rtl_sdr command to capture samples to stdout
+        # -f frequency_hz
+        # -s sample_rate_hz
+        # -n num_samples
+        # - (output to stdout)
+        proc = subprocess.Popen(
+            [rtl_sdr_path, "-f", str(frequency), "-s", str(sample_rate), "-n", str(num_samples), "-"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL
+        )
+        # Read the binary data from stdout
+        raw_data = proc.stdout.read(num_bytes)
+        proc.terminate()
+        
+        if len(raw_data) < num_bytes:
+            return None
+            
+        # Parse 8-bit unsigned IQ samples to complex numbers
+        samples = []
+        for i in range(0, len(raw_data), 2):
+            if i + 1 < len(raw_data):
+                # Normalize from [0, 255] to [-1.0, 1.0]
+                r = (raw_data[i] - 127.5) / 127.5
+                cls_q = (raw_data[i+1] - 127.5) / 127.5
+                samples.append(complex(r, cls_q))
+        return samples
+    except Exception as e:
+        print(f"Error reading from rtl_sdr binary: {e}", file=sys.stderr)
+        return None
+
+
 def generate_waterfall_data(center_freq, bandwidth, num_bins=128):
     """
     Generates spectral (waterfall) data.
     If a real RTL-SDR is connected and pyrtlsdr is working, it reads real samples and computes FFT.
-    Otherwise, it returns a high-fidelity simulation containing background noise,
-    doppler-shifted satellite carriers, and local RF interference based on the frequency.
+    Otherwise, it attempts to fall back to the rtl_sdr command line utility.
+    If no real device is detected, it falls back to a high-fidelity simulation.
     """
     global active_sdr, sdr_state
     
-    # Try reading real data if possible
+    samples = None
+    real_device = False
+    
+    # 1. Try reading real data via pyrtlsdr
     if sdr_state["connected"] and HAS_PYRTLSDR and sdr_state["is_receiving"]:
         try:
             if active_sdr is None:
@@ -172,78 +218,304 @@ def generate_waterfall_data(center_freq, bandwidth, num_bins=128):
                 active_sdr.center_freq = sdr_state["frequency_hz"]
                 active_sdr.gain = sdr_state["gain_db"]
             
-            # Read IQ samples
             samples = active_sdr.read_samples(256)
-            # Simple FFT power approximation
-            # Since this is a lightweight server, we do a quick power calculation
-            # and interpolate to match the requested bin count
-            fft_data = []
-            # Average power of chunks to simulate bin count
-            chunk_size = max(1, len(samples) // num_bins)
-            for i in range(num_bins):
-                chunk = samples[i*chunk_size : (i+1)*chunk_size]
-                if not chunk:
-                    fft_data.append(-70.0)
-                    continue
-                power = sum(abs(s)**2 for s in chunk) / len(chunk)
-                db = 10 * math.log10(power + 1e-10)
-                # Scale DB to look nice in waterfall (-100 to 0 range)
-                db_val = max(-100.0, min(0.0, db * 10 - 20))
-                fft_data.append(db_val)
-            return fft_data
+            real_device = True
         except Exception as e:
-            # Fallback to simulation on error and release active_sdr
+            # Fallback and release active_sdr
             if active_sdr:
                 try:
                     active_sdr.close()
                 except Exception:
                     pass
                 active_sdr = None
+                
+    # 2. Try reading real data via rtl_sdr command line utility (if pyrtlsdr is missing or failed)
+    if samples is None and sdr_state["is_receiving"] and shutil.which("rtl_sdr"):
+        samples = read_samples_from_rtl_sdr_bin(
+            sdr_state["frequency_hz"],
+            sdr_state["sample_rate_hz"],
+            256
+        )
+        if samples:
+            real_device = True
 
-    # High-Fidelity Simulation Mode
-    # Base noise floor around -85 dB to -70 dB with some jitter
+    # 3. Process samples if we got real data
+    if samples is not None and len(samples) > 0:
+        fft_data = []
+        chunk_size = max(1, len(samples) // num_bins)
+        for i in range(num_bins):
+            chunk = samples[i*chunk_size : (i+1)*chunk_size]
+            if not chunk:
+                fft_data.append(-75.0)
+                continue
+            power = sum(abs(s)**2 for s in chunk) / len(chunk)
+            db = 10 * math.log10(power + 1e-10)
+            db_val = max(-100.0, min(0.0, db * 10 - 20))
+            fft_data.append(db_val)
+            
+        # Store physical measurements in sdr_state so get_decoding_info can use them!
+        # Measure RMS power
+        total_power = sum(abs(s)**2 for s in samples) / len(samples)
+        dbfs = 10 * math.log10(total_power + 1e-10)
+        sdr_state["real_rssi"] = int(max(-110.0, min(-10.0, dbfs * 8 - 25)))
+        
+        # Measure SNR (peak bin - noise floor average)
+        max_val = max(fft_data)
+        avg_val = sum(fft_data) / len(fft_data)
+        sdr_state["real_snr"] = round(max(2.0, min(38.0, max_val - avg_val + 5.0)), 1)
+        sdr_state["real_signal_present"] = sdr_state["real_snr"] > 11.0
+        
+        return fft_data
+
+    # Indicate no real hardware metrics
+    sdr_state["real_rssi"] = None
+    sdr_state["real_snr"] = None
+    sdr_state["real_signal_present"] = None
+
+    # High-Fidelity Simulation Mode (if no physical device is readable)
     fft_data = [random.normalvariate(-78.0, 2.0) for _ in range(num_bins)]
     
-    # Add a satellite carrier signal if we are "receiving" and tuned close to target
-    # Let's assume we are tracking LAPAN-A2 (IO-86) FM voice downlink at 435.880 MHz
-    target_freq = 435880000
-    freq_diff = abs(center_freq - target_freq)
-    
-    # Satellite signal is visible if we are tuned within the bandwidth (e.g. 2 MHz)
-    if freq_diff < (bandwidth / 2):
-        # Calculate where the signal falls in our bins (0 to num_bins-1)
-        # Doppler shift shifts the signal slightly over time
-        t = time.time()
-        doppler_shift = 5000 * math.sin(t / 60.0) # +/- 5 kHz Doppler shift
-        signal_offset = (target_freq + doppler_shift) - center_freq
-        bin_position = int(((signal_offset / bandwidth) + 0.5) * num_bins)
-        
-        if 0 <= bin_position < num_bins:
-            # Generate a peak (FM modulated carrier with sidebands)
-            for i in range(num_bins):
-                dist = abs(i - bin_position)
-                if dist == 0:
-                    # Main carrier peak (-30 dB to -45 dB depending on reception)
-                    signal_strength = -35.0 + 5.0 * math.sin(t / 5.0) + random.normalvariate(0, 1.0)
-                elif dist <= 3:
-                    # Sidebands from modulation
-                    signal_strength = -50.0 - (dist * 8) + 10.0 * math.cos(t * 2.0) + random.normalvariate(0, 1.5)
-                else:
-                    continue
-                
-                # Merge with noise (logarithmic addition approximation)
-                fft_data[i] = 10 * math.log10(10**(fft_data[i]/10) + 10**(signal_strength/10))
+    if not sdr_state["is_receiving"]:
+        return fft_data
 
-    # Add some local RF interference (static birdies)
-    # E.g., a constant interference peak at 1/4 of the bandwidth
-    birdie_bin = int(num_bins * 0.25)
+    mode = sdr_state.get("mode", "FM")
+    t = time.time()
+
+    if mode == "DVB-T":
+        center_bin = num_bins // 2
+        width = int(num_bins * 0.65)
+        start = center_bin - width // 2
+        end = center_bin + width // 2
+        for i in range(num_bins):
+            if start <= i <= end:
+                sig = -42.0 + random.normalvariate(0, 1.2)
+                if i % 8 == 0:
+                    sig += 5.0
+                elif i == start or i == end:
+                    sig -= 10.0
+                fft_data[i] = 10 * math.log10(10**(fft_data[i]/10) + 10**(sig/10))
+                
+    elif mode == "DAB":
+        center_bin = num_bins // 2
+        width = int(num_bins * 0.28)
+        start = center_bin - width // 2
+        end = center_bin + width // 2
+        for i in range(num_bins):
+            if start <= i <= end:
+                sig = -45.0 + random.normalvariate(0, 0.9)
+                if i % 6 == 0:
+                    sig += 4.0
+                elif i == start or i == end:
+                    sig -= 8.0
+                fft_data[i] = 10 * math.log10(10**(fft_data[i]/10) + 10**(sig/10))
+                
+    elif mode == "AM":
+        center_bin = num_bins // 2
+        for i in range(num_bins):
+            dist = abs(i - center_bin)
+            if dist == 0:
+                sig = -32.0 + random.normalvariate(0, 0.5)
+            elif dist <= 3:
+                sig = -52.0 - (dist * 4) + random.normalvariate(0, 1.2)
+            else:
+                continue
+            fft_data[i] = 10 * math.log10(10**(fft_data[i]/10) + 10**(sig/10))
+            
+    elif mode in ("USB", "LSB"):
+        center_bin = num_bins // 2
+        offset = 4 if mode == "USB" else -4
+        peak_bin = center_bin + offset
+        for i in range(num_bins):
+            dist = abs(i - peak_bin)
+            if dist <= 3:
+                sig = -38.0 - (dist * 7) + random.normalvariate(0, 1.3)
+                fft_data[i] = 10 * math.log10(10**(fft_data[i]/10) + 10**(sig/10))
+                
+    else: # FM / WFM
+        center_bin = num_bins // 2
+        for i in range(num_bins):
+            dist = abs(i - center_bin)
+            if dist == 0:
+                sig = -36.0 + 3.0 * math.sin(t * 1.5) + random.normalvariate(0, 0.8)
+            elif dist <= 2:
+                sig = -46.0 - (dist * 5) + random.normalvariate(0, 1.1)
+            else:
+                continue
+            fft_data[i] = 10 * math.log10(10**(fft_data[i]/10) + 10**(sig/10))
+
+        target_sat_freq = 435880000
+        freq_diff = abs(center_freq - target_sat_freq)
+        if freq_diff < (bandwidth / 2):
+            doppler_shift = 6000 * math.sin(t / 45.0)
+            signal_offset = (target_sat_freq + doppler_shift) - center_freq
+            bin_position = int(((signal_offset / bandwidth) + 0.5) * num_bins)
+            if 0 <= bin_position < num_bins:
+                for i in range(num_bins):
+                    dist = abs(i - bin_position)
+                    if dist == 0:
+                        sig_strength = -40.0 + 4.0 * math.sin(t / 4.0) + random.normalvariate(0, 1.0)
+                    elif dist <= 2:
+                        sig_strength = -52.0 - (dist * 9) + random.normalvariate(0, 1.5)
+                    else:
+                        continue
+                    fft_data[i] = 10 * math.log10(10**(fft_data[i]/10) + 10**(sig_strength/10))
+
+    birdie_bin = int(num_bins * 0.20)
     for i in range(num_bins):
         dist = abs(i - birdie_bin)
         if dist < 2:
-            birdie_strength = -40.0 - (dist * 15) + random.normalvariate(0, 0.5)
+            birdie_strength = -38.0 - (dist * 12) + random.normalvariate(0, 0.4)
             fft_data[i] = 10 * math.log10(10**(fft_data[i]/10) + 10**(birdie_strength/10))
 
     return fft_data
+
+
+def get_decoding_info(mode, is_receiving):
+    if not is_receiving:
+        return None
+    
+    t = time.time()
+    
+    real_snr = sdr_state.get("real_snr")
+    real_rssi = sdr_state.get("real_rssi")
+    real_signal_present = sdr_state.get("real_signal_present")
+    
+    is_real = real_snr is not None and real_rssi is not None
+    
+    if is_real:
+        rssi = real_rssi
+        snr = real_snr
+        signal_ok = real_signal_present
+    else:
+        # Fallback simulation
+        rssi = int(-48.0 + 3.0 * math.sin(t / 4.0) + random.randint(-1, 1))
+        snr = round(25.4 + 1.8 * math.sin(t / 5.0) + random.uniform(-0.4, 0.4), 1)
+        signal_ok = True
+        
+    if mode == "FM":
+        if is_real and not signal_ok:
+            return {
+                "signal_strength_dbm": rssi,
+                "stereo": False,
+                "snr_db": snr,
+                "rds": {
+                    "station": "NO SIGNAL",
+                    "pty": "None",
+                    "text": "TUNING... MENUNGGU SINYAL FM YANG KUAT (STATIC)..."
+                },
+                "audio_freq_hz": 0
+            }
+            
+        rds_messages = [
+            "SATELINE LAPAN-A2 REPEATER ACTIVE",
+            "UPLINK: 145.880 MHZ (PL 88.5 HZ)",
+            "DOWNLINK: 435.880 MHZ FM VOICE",
+            "TELEMETRY: BATT=8.2V TEMP=24.5C",
+            "AMSAT INDONESIA - ORARI & LAPAN",
+            "PRAMBORS FM TERESTRIAL BROADCAST"
+        ]
+        msg_idx = int(t / 6) % len(rds_messages)
+        return {
+            "signal_strength_dbm": rssi,
+            "stereo": snr > 15.0,
+            "snr_db": snr,
+            "rds": {
+                "station": "IO-86/PRAMBORS" if not is_real else "REAL FM BROADCAST",
+                "pty": "Science/Pop",
+                "text": rds_messages[msg_idx]
+            },
+            "audio_freq_hz": int(800 + 350 * math.sin(t)) if snr > 10.0 else 0
+        }
+        
+    elif mode == "DAB":
+        if is_real and not signal_ok:
+            return {
+                "signal_strength_dbm": rssi,
+                "snr_db": snr,
+                "ensemble": "NO SIGNAL",
+                "service": "NO SERVICE",
+                "bitrate_kbps": 0,
+                "codec": "None",
+                "ber": 0.08,
+                "slideshow_id": None,
+                "subcarriers_count": 0
+            }
+            
+        services = ["EDUSAT DAB+", "LAPAN MUSIC", "SATELINE INFO", "WEATHER NEWS"]
+        service_idx = int(t / 10) % len(services)
+        
+        slide_images = [
+            "orbit_tracking",
+            "lapan_satellite",
+            "spectrogram_pattern",
+            "earth_view_indonesia"
+        ]
+        slide_idx = int(t / 8) % len(slide_images)
+        
+        if is_real:
+            ber_val = round(max(0.000001, min(0.09, 1.0 / (10 ** (snr / 10.0)))), 6)
+        else:
+            ber_val = round(0.00012 + 0.00005 * math.sin(t) + random.uniform(-0.00001, 0.00001), 6)
+            
+        return {
+            "signal_strength_dbm": rssi,
+            "snr_db": snr,
+            "ensemble": "INDONESIA DIGITAL RADIO" if not is_real else "REAL DAB ENSEMBLE",
+            "service": services[service_idx],
+            "bitrate_kbps": 96,
+            "codec": "AAC-LC (HE-AAC v2)",
+            "ber": ber_val,
+            "slideshow_id": slide_images[slide_idx],
+            "subcarriers_count": 1536
+        }
+        
+    elif mode == "DVB-T":
+        if is_real and not signal_ok:
+            return {
+                "signal_strength_dbm": rssi,
+                "snr_db": snr,
+                "channel": "NO SIGNAL",
+                "resolution": "None",
+                "video_codec": "None",
+                "audio_codec": "None",
+                "constellation": "64-QAM (UNLOCKED)",
+                "guard_interval": "None",
+                "code_rate": "None",
+                "ber": 0.1,
+                "carrier_lock": False,
+                "cell_id": 0
+            }
+            
+        channels = ["TVRI SPORT HD", "TVRI NASIONAL", "LAPAN SPACE TV", "METEOR HD"]
+        ch_idx = int(t / 15) % len(channels)
+        
+        if is_real:
+            ber_val = round(max(1e-9, min(0.05, 1.0 / (10 ** (snr / 8.0)))), 9)
+        else:
+            ber_val = round(1.2e-7 + 3e-8 * math.sin(t), 9)
+            
+        return {
+            "signal_strength_dbm": rssi,
+            "snr_db": snr,
+            "channel": channels[ch_idx] if not is_real else "REAL DVB-T MUX",
+            "resolution": "1920x1080i @ 50fps" if ch_idx % 2 == 0 else "1280x720p @ 60fps",
+            "video_codec": "H.264 / MPEG-4 AVC",
+            "audio_codec": "HE-AAC",
+            "constellation": "64-QAM",
+            "guard_interval": "1/32",
+            "code_rate": "2/3",
+            "ber": ber_val,
+            "carrier_lock": True,
+            "cell_id": 4093
+        }
+        
+    else: # AM / USB / LSB
+        return {
+            "signal_strength_dbm": rssi,
+            "snr_db": snr,
+            "carrier_offset_hz": int(12 * math.sin(t * 2.0)),
+            "audio_state": "Demodulating SSB/AM audio..."
+        }
 
 
 class SDRRequestHandler(BaseHTTPRequestHandler):
@@ -266,11 +538,15 @@ class SDRRequestHandler(BaseHTTPRequestHandler):
             # Run a dynamic check on each status request
             check_rtl_sdr_connection()
             
+            # Inject dynamic decoding info
+            status_payload = dict(sdr_state)
+            status_payload["decoding_info"] = get_decoding_info(sdr_state["mode"], sdr_state["is_receiving"])
+            
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self._send_cors_headers()
             self.end_headers()
-            self.wfile.write(json.dumps(sdr_state).encode())
+            self.wfile.write(json.dumps(status_payload).encode())
 
         elif path == '/api/waterfall':
             # Get waterfall FFT data

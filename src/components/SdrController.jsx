@@ -23,10 +23,18 @@ export default function SdrController({ satellite: sat, simTime }) {
   const [tuningFreq, setTuningFreq] = useState(435.880); // in MHz
   
   const canvasRef = useRef(null);
+  const constellationCanvasRef = useRef(null);
+  const videoCanvasRef = useRef(null);
   const animationRef = useRef(null);
   const waterfallHistoryRef = useRef([]); // holds historical FFT arrays
   const statusIntervalRef = useRef(null);
   const waterfallIntervalRef = useRef(null);
+  
+  const terrestrialPresets = [
+    { label: 'Prambors FM (Jakarta)', freq: 97.4, mode: 'FM', desc: 'Siaran Radio Musik Terestrial Analok' },
+    { label: 'MUX DAB+ (Digital Radio)', freq: 229.072, mode: 'DAB', desc: 'Digital Audio Broadcasting Band III' },
+    { label: 'TVRI Digital MUX (DVB-T)', freq: 578.0, mode: 'DVB-T', desc: 'Digital Video Broadcast - Terrestrial' }
+  ];
   
   const API_BASE = 'http://localhost:8055';
 
@@ -384,6 +392,232 @@ export default function SdrController({ satellite: sat, simTime }) {
     };
   }, [serverStatus, sdrState.is_receiving, tuningFreq]);
 
+  // Constellation & Decoder visual rendering engine
+  useEffect(() => {
+    if (!sdrState.is_receiving || !sdrState.decoding_info) return;
+
+    let animId;
+    const drawDecoders = () => {
+      const cCanvas = constellationCanvasRef.current;
+      if (cCanvas) {
+        const ctx = cCanvas.getContext('2d');
+        const W = cCanvas.width;
+        const H = cCanvas.height;
+        ctx.fillStyle = '#020710';
+        ctx.fillRect(0, 0, W, H);
+        
+        // Draw grid
+        ctx.strokeStyle = 'rgba(90, 122, 154, 0.15)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(W/2, 0); ctx.lineTo(W/2, H);
+        ctx.moveTo(0, H/2); ctx.lineTo(W, H/2);
+        ctx.stroke();
+        
+        const mode = sdrState.mode;
+        if (mode === 'DAB') {
+          // DQPSK: 4 points
+          const points = [
+            { x: W * 0.28, y: H * 0.28 },
+            { x: W * 0.72, y: H * 0.28 },
+            { x: W * 0.28, y: H * 0.72 },
+            { x: W * 0.72, y: H * 0.72 }
+          ];
+          for (let p of points) {
+            ctx.fillStyle = 'rgba(0, 229, 255, 0.75)';
+            for (let i = 0; i < 6; i++) {
+              const dx = (Math.random() - 0.5) * 5;
+              const dy = (Math.random() - 0.5) * 5;
+              ctx.beginPath();
+              ctx.arc(p.x + dx, p.y + dy, 1.2, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else if (mode === 'DVB-T') {
+          // 64-QAM: 8x8 grid
+          ctx.fillStyle = 'rgba(0, 255, 136, 0.7)';
+          for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+              const px = W * 0.13 + c * (W * 0.106);
+              const py = H * 0.13 + r * (H * 0.106);
+              for (let i = 0; i < 2; i++) {
+                const dx = (Math.random() - 0.5) * 2.5;
+                const dy = (Math.random() - 0.5) * 2.5;
+                ctx.beginPath();
+                ctx.arc(px + dx, py + dy, 0.9, 0, Math.PI * 2);
+                ctx.fill();
+              }
+            }
+          }
+        }
+      }
+
+      const vCanvas = videoCanvasRef.current;
+      if (vCanvas) {
+        const ctx = vCanvas.getContext('2d');
+        const W = vCanvas.width;
+        const H = vCanvas.height;
+        ctx.fillStyle = '#020710';
+        ctx.fillRect(0, 0, W, H);
+        
+        const mode = sdrState.mode;
+        const info = sdrState.decoding_info;
+        const t = Date.now() / 1000;
+        
+        if (mode === 'FM') {
+          // Draw modulated FM oscilloscope
+          ctx.strokeStyle = 'rgba(90, 122, 154, 0.08)';
+          ctx.lineWidth = 1;
+          for (let x = 0; x < W; x += 15) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+          }
+          for (let y = 0; y < H; y += 12) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+          }
+          
+          ctx.strokeStyle = '#00e5ff';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          const amp = 14 + 2 * Math.sin(t * 0.5);
+          ctx.moveTo(0, H/2);
+          for (let x = 0; x < W; x++) {
+            const angle = x * 0.08 + t * 4.5 + 3.5 * Math.sin(x * 0.02 + t * 1.5);
+            const y = H/2 + amp * Math.sin(angle);
+            ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+          
+          ctx.fillStyle = 'rgba(0, 229, 255, 0.9)';
+          ctx.font = '7px monospace';
+          ctx.fillText("FM AUDIO ANALYZER", 6, 10);
+        } else if (mode === 'DAB' && info.slideshow_id) {
+          ctx.strokeStyle = 'rgba(0, 229, 255, 0.3)';
+          ctx.strokeRect(3, 3, W-6, H-6);
+          
+          if (info.slideshow_id === 'orbit_tracking') {
+            ctx.strokeStyle = '#00e5ff';
+            ctx.beginPath();
+            ctx.ellipse(W/2, H/2 + 2, 35, 12, Math.PI/6, 0, Math.PI*2);
+            ctx.stroke();
+            
+            ctx.fillStyle = '#0f3860';
+            ctx.beginPath();
+            ctx.arc(W/2, H/2 + 2, 8, 0, Math.PI*2);
+            ctx.fill();
+            
+            const sx = W/2 + 35 * Math.cos(t * 0.7) * Math.cos(Math.PI/6) - 12 * Math.sin(t * 0.7) * Math.sin(Math.PI/6);
+            const sy = H/2 + 2 + 35 * Math.cos(t * 0.7) * Math.sin(Math.PI/6) + 12 * Math.sin(t * 0.7) * Math.cos(Math.PI/6);
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(sx, sy, 2, 0, Math.PI*2);
+            ctx.fill();
+            
+            ctx.fillStyle = '#8fa0b5';
+            ctx.font = '6px sans-serif';
+            ctx.fillText("SLIDE: ORBIT VIEW", 8, 12);
+          } else if (info.slideshow_id === 'lapan_satellite') {
+            ctx.strokeStyle = '#ffea00';
+            ctx.strokeRect(W/2 - 8, H/2 - 8, 16, 16);
+            ctx.strokeRect(W/2 - 28, H/2 - 3, 20, 6);
+            ctx.strokeRect(W/2 + 8, H/2 - 3, 20, 6);
+            ctx.beginPath();
+            ctx.moveTo(W/2, H/2 + 8);
+            ctx.lineTo(W/2, H/2 + 16);
+            ctx.stroke();
+            
+            ctx.fillStyle = '#8fa0b5';
+            ctx.font = '6px sans-serif';
+            ctx.fillText("SLIDE: LAPAN A2", 8, 12);
+          } else if (info.slideshow_id === 'spectrogram_pattern') {
+            const numBars = 7;
+            ctx.fillStyle = '#00e5ff';
+            for (let i = 0; i < numBars; i++) {
+              const h = Math.max(4, 20 + 16 * Math.sin(t * 5 + i * 1.5));
+              ctx.fillRect(22 + i * 10, H - h - 10, 6, h);
+            }
+            ctx.fillStyle = '#8fa0b5';
+            ctx.font = '6px sans-serif';
+            ctx.fillText("SLIDE: TRANSMIT EQ", 8, 12);
+          } else {
+            ctx.strokeStyle = '#00ff88';
+            ctx.beginPath();
+            ctx.arc(W/2, H/2, 18, 0, Math.PI*2);
+            ctx.stroke();
+            const sx = W/2 + 18 * Math.cos(t * 1.2);
+            const sy = H/2 + 18 * Math.sin(t * 1.2);
+            ctx.beginPath();
+            ctx.moveTo(W/2, H/2);
+            ctx.lineTo(sx, sy);
+            ctx.stroke();
+            
+            ctx.fillStyle = '#8fa0b5';
+            ctx.font = '6px sans-serif';
+            ctx.fillText("SLIDE: RADAR INDO", 8, 12);
+          }
+        } else if (mode === 'DVB-T') {
+          // TV decoder video simulation
+          ctx.strokeStyle = '#00ff88';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(W/2, H + 35, 75, Math.PI, 0);
+          ctx.stroke();
+          
+          ctx.strokeStyle = 'rgba(0, 255, 136, 0.25)';
+          ctx.beginPath();
+          ctx.arc(W/2, H + 35, 55, Math.PI, 0);
+          ctx.stroke();
+          
+          const satX = W/2 + 65 * Math.cos(t * 0.4);
+          const satY = H + 35 + 65 * Math.sin(t * 0.4);
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(satX, satY, 2.5, 0, Math.PI*2);
+          ctx.fill();
+          
+          ctx.strokeStyle = 'rgba(0, 255, 136, 0.4)';
+          ctx.beginPath();
+          ctx.moveTo(satX, satY);
+          ctx.lineTo(W/2, H - 20);
+          ctx.stroke();
+          
+          ctx.fillStyle = 'rgba(0, 255, 136, 0.08)';
+          ctx.fillRect(0, Math.floor(t * 22) % H, W, 2);
+          
+          ctx.fillStyle = '#00ff88';
+          ctx.font = '6px monospace';
+          ctx.fillText("REC ●", 6, 11);
+          ctx.fillText("SAT_CAM_A2", 6, H - 6);
+          ctx.fillText(`AZ:${(115 + 15 * Math.sin(t)).toFixed(1)}°`, W - 44, 11);
+          ctx.fillText(`EL:${(40 + 8 * Math.cos(t)).toFixed(1)}°`, W - 44, 19);
+        } else {
+          // SSB/AM noise visualizer
+          ctx.strokeStyle = 'rgba(90, 122, 154, 0.08)';
+          ctx.strokeRect(3, 3, W-6, H-6);
+          ctx.strokeStyle = '#8fa0b5';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(0, H/2);
+          for (let x = 0; x < W; x++) {
+            const y = H/2 + (Math.random() - 0.5) * 16;
+            ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+          ctx.fillStyle = '#8fa0b5';
+          ctx.font = '7px monospace';
+          ctx.fillText("SSB/AM DETECTOR", 6, 10);
+        }
+      }
+      animId = requestAnimationFrame(drawDecoders);
+    };
+
+    animId = requestAnimationFrame(drawDecoders);
+    return () => cancelAnimationFrame(animId);
+  }, [sdrState.is_receiving, sdrState.mode, sdrState.decoding_info]);
+
   // Adjust frequency by steps
   const adjustFreq = (deltaMHz) => {
     const next = Math.max(1.0, tuningFreq + deltaMHz);
@@ -473,17 +707,17 @@ export default function SdrController({ satellite: sat, simTime }) {
             <p>Untuk menjembatani React Frontend dengan alat RTL-SDR, jalankan script Python yang disediakan di root proyek:</p>
             <pre className="guide-code-block">python3 sdr_server.py</pre>
             
-            <h5>2. Instalasi Driver RTL-SDR</h5>
+            <h5>2. Instalasi Driver & Pembacaan Perangkat Fisik (TV Stick)</h5>
             <ul>
               <li><strong>Linux (Debian/Ubuntu):</strong><br />
                 <code className="inline-code">sudo apt update && sudo apt install rtl-sdr python3-pip</code><br />
-                Instal library Python: <code className="inline-code">pip install pyrtlsdr</code>
+                Server Python mendeteksi perangkat fisik secara langsung. Jika library <code className="inline-code">pyrtlsdr</code> tidak dipasang (<code className="inline-code">pip install pyrtlsdr</code>), server akan otomatis membaca data mentah IQ menggunakan command line utility <code className="inline-code">rtl_sdr</code> bawaan sistem.
               </li>
               <li><strong>Windows:</strong><br />
-                Gunakan software <strong>Zadig</strong> untuk mengganti driver default Realtek dengan driver <strong>WinUSB</strong> pada RTL2832U.
+                Gunakan utilitas <strong>Zadig</strong> untuk mengganti driver default Realtek TV stick dengan driver <strong>WinUSB</strong>.
               </li>
-              <li><strong>SDR# (SDR Sharp) Sync:</strong><br />
-                Saat server Python berjalan, frekuensi yang Anda tune di Sateline akan secara otomatis disinkronkan ke SDR# melalui plugin NetRemote (port 8181).
+              <li><strong>Deteksi Sinyal Nyata:</strong><br />
+                Jika Anda menyambungkan antena, server akan mengukur SNR nyata. Pengurai sinyal (DVB-T/DAB/FM) akan mengunci saluran (Lock) secara otomatis jika SNR &gt; 11 dB. Jika sinyal hilang, decoder menampilkan status <strong>LOCK LOST / NO SIGNAL</strong>.
               </li>
             </ul>
           </div>
@@ -508,6 +742,126 @@ export default function SdrController({ satellite: sat, simTime }) {
         </div>
         <canvas ref={canvasRef} width={255} height={120} className="sdr-waterfall-canvas" />
       </div>
+
+      {/* SDR Demodulator Decoder HUD */}
+      {sdrState.is_receiving && sdrState.decoding_info && (
+        <div className="sdr-decoder-hud">
+          <div className="decoder-hud-title">
+            <h4>PENGURAI SINYAL / DECODER HUD</h4>
+            <span className="decoder-hud-badge">{sdrState.mode} MODE</span>
+          </div>
+          
+          <div className="decoder-hud-body">
+            {/* Left Column: Details */}
+            <div className="decoder-hud-details">
+              <div className="decoder-metric-row">
+                <span className="decoder-metric-lbl">Signal Strength</span>
+                <span className={`decoder-metric-val font-numeric ${sdrState.decoding_info.signal_strength_dbm > -50 ? 'green' : 'yellow'}`}>
+                  {sdrState.decoding_info.signal_strength_dbm} dBm
+                </span>
+              </div>
+              <div className="decoder-metric-row">
+                <span className="decoder-metric-lbl">Signal SNR</span>
+                <span className="decoder-metric-val font-numeric green">
+                  {sdrState.decoding_info.snr_db} dB
+                </span>
+              </div>
+
+              {sdrState.mode === 'FM' && (
+                <>
+                  <div className="decoder-metric-row">
+                    <span className="decoder-metric-lbl">Stereo Pilot</span>
+                    <span className="decoder-metric-val green">LOCKED</span>
+                  </div>
+                  <div className="decoder-metric-row">
+                    <span className="decoder-metric-lbl">Audio Peak</span>
+                    <span className="decoder-metric-val font-numeric">
+                      {sdrState.decoding_info.audio_freq_hz} Hz
+                    </span>
+                  </div>
+                </>
+              )}
+
+              {sdrState.mode === 'DAB' && (
+                <>
+                  <div className="decoder-metric-row">
+                    <span className="decoder-metric-lbl">Ensemble</span>
+                    <span className="decoder-metric-val">{sdrState.decoding_info.ensemble}</span>
+                  </div>
+                  <div className="decoder-metric-row">
+                    <span className="decoder-metric-lbl">Bit Error Rate</span>
+                    <span className="decoder-metric-val font-numeric yellow">
+                      {sdrState.decoding_info.ber}
+                    </span>
+                  </div>
+                  <div className="decoder-metric-row">
+                    <span className="decoder-metric-lbl">Audio Codec</span>
+                    <span className="decoder-metric-val">{sdrState.decoding_info.codec} ({sdrState.decoding_info.bitrate_kbps}k)</span>
+                  </div>
+                </>
+              )}
+
+              {sdrState.mode === 'DVB-T' && (
+                <>
+                  <div className="decoder-metric-row">
+                    <span className="decoder-metric-lbl">Carrier Status</span>
+                    <span className="decoder-metric-val green">LOCKED (64-QAM)</span>
+                  </div>
+                  <div className="decoder-metric-row">
+                    <span className="decoder-metric-lbl">Resolution</span>
+                    <span className="decoder-metric-val font-numeric">{sdrState.decoding_info.resolution}</span>
+                  </div>
+                  <div className="decoder-metric-row">
+                    <span className="decoder-metric-lbl">Bit Error Rate</span>
+                    <span className="decoder-metric-val font-numeric green">
+                      {sdrState.decoding_info.ber}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Right Column: Canvases */}
+            <div className="decoder-hud-visuals">
+              {(sdrState.mode === 'DAB' || sdrState.mode === 'DVB-T') && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                  <canvas ref={constellationCanvasRef} width={65} height={65} className="sdr-constellation-canvas" />
+                  <span style={{ fontSize: '0.45rem', color: '#5a7a9a', fontWeight: 'bold' }}>IQ DIAGRAM</span>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                <canvas ref={videoCanvasRef} width={110} height={65} className="sdr-video-canvas" />
+                <span style={{ fontSize: '0.45rem', color: '#5a7a9a', fontWeight: 'bold' }}>
+                  {sdrState.mode === 'FM' ? 'AUDIO WAVE' : sdrState.mode === 'DAB' ? 'SLIDESHOW' : 'TV DECODER'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* RDS Marquee / Service Bar */}
+          {sdrState.mode === 'FM' && sdrState.decoding_info.rds && (
+            <div className="rds-marquee-container">
+              <div className="rds-station-name">{sdrState.decoding_info.rds.station}</div>
+              <div className="rds-text-scroll">{sdrState.decoding_info.rds.text}</div>
+            </div>
+          )}
+
+          {sdrState.mode === 'DAB' && (
+            <div className="rds-marquee-container">
+              <div className="rds-station-name" style={{ color: '#00ff88', borderColor: 'rgba(0,255,136,0.3)' }}>SERVICE</div>
+              <div style={{ color: '#e0e6ed', fontSize: '0.55rem', fontWeight: 'bold' }}>{sdrState.decoding_info.service}</div>
+            </div>
+          )}
+
+          {sdrState.mode === 'DVB-T' && (
+            <div className="rds-marquee-container">
+              <div className="rds-station-name" style={{ color: '#ffea00', borderColor: 'rgba(255,234,0,0.3)' }}>CHANNEL</div>
+              <div style={{ color: '#e0e6ed', fontSize: '0.55rem', fontWeight: 'bold' }}>{sdrState.decoding_info.channel}</div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Receiver Controls Section */}
       <div className="sdr-receiver-controls">
@@ -545,8 +899,8 @@ export default function SdrController({ satellite: sat, simTime }) {
           <div className="sdr-settings-panel">
             <div className="setting-control-row">
               <span className="setting-label">Mode Demodulasi</span>
-              <div className="setting-btn-grid">
-                {['FM', 'AM', 'USB', 'LSB'].map(m => (
+              <div className="setting-btn-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+                {['FM', 'AM', 'USB', 'LSB', 'DAB', 'DVB-T'].map(m => (
                   <button 
                     key={m} 
                     className={`setting-btn ${sdrState.mode === m ? 'active' : ''}`}
@@ -593,11 +947,35 @@ export default function SdrController({ satellite: sat, simTime }) {
 
       {/* Preset Frequencies Section */}
       <div className="sdr-presets-section">
-        <span className="presets-section-title">PRESET FREKUENSI TERBANDING</span>
-        {presets.length > 0 ? (
+        {presets.length > 0 && (
+          <div className="preset-section-container">
+            <span className="presets-section-title">PRESET PELACAKAN SATELIT</span>
+            <div className="presets-grid">
+              {presets.map((preset, idx) => {
+                const isActive = Math.abs(tuningFreq - preset.freq) < 0.0001 && sdrState.mode === preset.mode;
+                return (
+                  <button
+                    key={idx}
+                    className={`preset-pill-btn ${isActive ? 'active' : ''}`}
+                    onClick={() => tuneFrequency(preset.freq, preset.mode)}
+                  >
+                    <div className="preset-pill-top">
+                      <span className="preset-pill-name">{preset.label}</span>
+                      <span className="preset-pill-freq font-numeric">{preset.freq.toFixed(3)} MHz</span>
+                    </div>
+                    <span className="preset-pill-desc">{preset.desc}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="preset-section-container" style={{ marginTop: presets.length > 0 ? '6px' : '0' }}>
+          <span className="presets-section-title">PRESET TERESTRIAL & ALAT UJI</span>
           <div className="presets-grid">
-            {presets.map((preset, idx) => {
-              const isActive = Math.abs(tuningFreq - preset.freq) < 0.0001;
+            {terrestrialPresets.map((preset, idx) => {
+              const isActive = Math.abs(tuningFreq - preset.freq) < 0.0001 && sdrState.mode === preset.mode;
               return (
                 <button
                   key={idx}
@@ -613,9 +991,7 @@ export default function SdrController({ satellite: sat, simTime }) {
               );
             })}
           </div>
-        ) : (
-          <p className="presets-empty-text">Pilih satelit di peta untuk memuat preset frekuensi radio.</p>
-        )}
+        </div>
       </div>
     </div>
   );
