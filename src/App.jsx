@@ -93,6 +93,7 @@ function App() {
   
   // SDR Panel Global Toggle State
   const [showSdrPanel, setShowSdrPanel] = useState(false);
+  const [isSdrFullscreen, setIsSdrFullscreen] = useState(false);
 
   // Handle satellite selection (with auto-collapse sidebar on mobile)
   const handleSelectSatellite = (sat) => {
@@ -277,13 +278,18 @@ function App() {
 
       {/* Floating SDR Monitor Panel */}
       {showSdrPanel && (
-        <div className={`sdr-panel-floating ${selectedSatellite ? 'shifted' : ''} ${isSidebarOpen ? '' : 'sidebar-collapsed'}`}>
+        <div className={`sdr-panel-floating ${selectedSatellite ? 'shifted' : ''} ${isSidebarOpen ? '' : 'sidebar-collapsed'} ${isSdrFullscreen ? 'fullscreen' : ''}`}>
           <div className="sdr-panel-floating-header">
             <h3>SDR MONITOR CONSOLE</h3>
             <button className="sdr-panel-close-btn" onClick={() => setShowSdrPanel(false)} title="Close SDR Panel">✕</button>
           </div>
           <div className="sdr-panel-floating-body">
-            <SdrController satellite={selectedSatellite} simTime={simTime} />
+            <SdrController 
+              satellite={selectedSatellite} 
+              simTime={simTime} 
+              isFullscreen={isSdrFullscreen} 
+              setIsFullscreen={setIsSdrFullscreen} 
+            />
           </div>
         </div>
       )}

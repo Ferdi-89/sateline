@@ -2830,3 +2830,212 @@ canvas.map-area {
   flex-direction: column;
   gap: 8px;
 }
+
+/* ============================================================
+   SDR FULLSCREEN AND AUDIO STYLES
+   ============================================================ */
+.sdr-panel-floating.fullscreen {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  border-radius: 0 !important;
+  border: none !important;
+  z-index: 9999 !important;
+  backdrop-filter: blur(15px) !important;
+  background: rgba(4, 11, 24, 0.98) !important;
+  box-sizing: border-box;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+.sdr-panel-floating.fullscreen .sdr-panel-floating-header {
+  padding: 14px 20px;
+  background: rgba(10, 22, 40, 0.8);
+  border-bottom: 1px solid rgba(0, 229, 255, 0.2);
+}
+
+.sdr-panel-floating.fullscreen .sdr-panel-floating-header h3 {
+  font-size: 0.85rem;
+  letter-spacing: 0.15em;
+}
+
+.sdr-panel-floating.fullscreen .sdr-panel-floating-body {
+  padding: 20px;
+  height: calc(100vh - 54px);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.sdr-controller-box.fullscreen {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+  gap: 16px;
+}
+
+.sdr-fullscreen-layout {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 24px;
+  height: calc(100vh - 110px);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.sdr-fs-controls-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  padding-right: 8px;
+  max-height: 100%;
+}
+
+.sdr-fs-controls-col::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sdr-fs-controls-col::-webkit-scrollbar-thumb {
+  background: rgba(90, 122, 154, 0.3);
+  border-radius: 2px;
+}
+
+.sdr-fs-visuals-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  max-height: 100%;
+}
+
+.sdr-fullscreen-btn {
+  background: transparent;
+  border: 1px solid rgba(90, 122, 154, 0.3);
+  border-radius: 3px;
+  color: #8fa0b5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 5px;
+  transition: all 0.2s ease;
+  height: 24px;
+  width: 24px;
+}
+
+.sdr-fullscreen-btn:hover {
+  color: #00e5ff;
+  border-color: #00e5ff;
+  background: rgba(0, 229, 255, 0.05);
+}
+
+/* Audio control elements */
+.sdr-audio-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(10, 22, 40, 0.6);
+  border: 1px solid rgba(90, 122, 154, 0.3);
+  border-radius: 3px;
+  padding: 0 8px;
+  height: 28px;
+  flex-grow: 1;
+  max-width: 140px;
+}
+
+.sdr-mute-btn {
+  background: transparent;
+  border: none;
+  color: #8fa0b5;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+}
+
+.sdr-mute-btn:hover {
+  color: #ef4444;
+}
+
+.sdr-mute-btn.muted {
+  color: #ef4444;
+  animation: pulseRed 1.5s infinite;
+}
+
+@keyframes pulseRed {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+.sdr-volume-slider {
+  flex-grow: 1;
+  height: 3px;
+  border-radius: 1.5px;
+  background: rgba(90, 122, 154, 0.3);
+  outline: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.sdr-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #00e5ff;
+  box-shadow: 0 0 4px rgba(0, 229, 255, 0.5);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.sdr-volume-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.3);
+}
+
+/* Fullscreen scaling of canvases */
+.sdr-waterfall-canvas.fullscreen {
+  height: 320px !important;
+}
+
+.sdr-constellation-canvas.fullscreen {
+  width: 150px !important;
+  height: 150px !important;
+}
+
+.sdr-video-canvas.fullscreen {
+  width: 260px !important;
+  height: 150px !important;
+}
+
+.sdr-standard-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Responsive flex wrap for controls row */
+.flex-wrap {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1024px) {
+  .sdr-fullscreen-layout {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+  .sdr-fs-controls-col, .sdr-fs-visuals-col {
+    overflow-y: visible;
+    max-height: none;
+  }
+}
