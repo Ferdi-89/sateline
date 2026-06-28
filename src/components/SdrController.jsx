@@ -8,6 +8,7 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
   const [serverStatus, setServerStatus] = useState('checking'); // 'checking' | 'online' | 'offline'
   const [sdrState, setSdrState] = useState({
     connected: false,
+    device_type: 'rtl-sdr', // 'rtl-sdr' | 'airspy'
     device_name: 'None',
     driver_status: 'Checking...',
     frequency_hz: 435880000,
@@ -17,7 +18,16 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
     squelch: -50,
     is_receiving: false,
     ppm_error: 0,
-    physical_usb_detected: false
+    physical_usb_detected: false,
+    
+    // Airspy
+    airspy_gain_lna: 8,
+    airspy_gain_mix: 8,
+    airspy_gain_vga: 8,
+    airspy_bias_tee: false,
+
+    // SatDump
+    satdump_pipeline: null
   });
   
   const [sdrsharpActive, setSdrsharpActive] = useState(false);
@@ -28,6 +38,9 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
   // Audio state
   const [volume, setVolume] = useState(60);
   const [isMuted, setIsMuted] = useState(false);
+
+  // Tab state for Decoder HUD ('standard' | 'satdump')
+  const [decoderTab, setDecoderTab] = useState('standard');
 
   // Audio refs
   const audioCtxRef = useRef(null);
@@ -645,7 +658,10 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
         ctx.stroke();
         
         const mode = sdrState.mode;
-        if (mode === 'DAB') {
+        // SatDump mode can use constellation as well if enabled
+        const isMeteor = Math.abs(sdrState.frequency_hz / 1e6 - 137.9) < 0.05;
+        
+        if (mode === 'DAB' || (decoderTab === 'satdump' && !isMeteor)) {
           const points = [
             { x: W * 0.28, y: H * 0.28 },
             { x: W * 0.72, y: H * 0.28 },
@@ -681,6 +697,27 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
               }
             }
           }
+        } else if (decoderTab === 'satdump' && isMeteor) {
+          // QPSK / Costas Loop lock constellation
+          const points = [
+            { x: W * 0.28, y: H * 0.28 },
+            { x: W * 0.72, y: H * 0.28 },
+            { x: W * 0.28, y: H * 0.72 },
+            { x: W * 0.72, y: H * 0.72 }
+          ];
+          // Scatter more noise if SNR is lower
+          const snr = sdrState.decoding_info?.snr_db || 12;
+          const spread = Math.max(3, 20 - snr);
+          for (let p of points) {
+            ctx.fillStyle = '#00ff88';
+            for (let i = 0; i < 8; i++) {
+              const dx = (Math.random() - 0.5) * spread * (W / 110);
+              const dy = (Math.random() - 0.5) * spread * (H / 65);
+              ctx.beginPath();
+              ctx.arc(p.x + dx, p.y + dy, isFullscreen ? 1.8 : 1.0, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
         }
       }
 
@@ -696,93 +733,151 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
         const info = sdrState.decoding_info;
         const t = Date.now() / 1000;
         
-        if (mode === 'FM') {
-          const mhz = sdrState.frequency_hz / 1000000;
-          const isNoaa = Math.abs(mhz - 137.620) < 0.01 || Math.abs(mhz - 137.9125) < 0.01 || Math.abs(mhz - 137.100) < 0.01;
+        const mhz = sdrState.frequency_hz / 1000000;
+        const isNoaa = mode === 'FM' && (Math.abs(mhz - 137.620) < 0.01 || Math.abs(mhz - 137.9125) < 0.01 || Math.abs(mhz - 137.100) < 0.01);
+        const isMeteor = Math.abs(mhz - 137.9) < 0.05;
+        
+        if (isNoaa || (decoderTab === 'satdump' && isNoaa)) {
+          const isSignalOk = info && info.signal_strength_dbm > -95;
           
-          if (isNoaa) {
-            const isSignalOk = info && info.signal_strength_dbm > -95;
+          if (isSignalOk) {
+            let noaaImg = null;
+            if (Math.abs(mhz - 137.620) < 0.01) noaaImg = noaaImagesRef.current.noaa15;
+            else if (Math.abs(mhz - 137.9125) < 0.01) noaaImg = noaaImagesRef.current.noaa18;
+            else if (Math.abs(mhz - 137.100) < 0.01) noaaImg = noaaImagesRef.current.noaa19;
             
-            if (isSignalOk) {
-              let noaaImg = null;
-              if (Math.abs(mhz - 137.620) < 0.01) noaaImg = noaaImagesRef.current.noaa15;
-              else if (Math.abs(mhz - 137.9125) < 0.01) noaaImg = noaaImagesRef.current.noaa18;
-              else if (Math.abs(mhz - 137.100) < 0.01) noaaImg = noaaImagesRef.current.noaa19;
+            const sweepDuration = 18;
+            const sweepY = H * ((t % sweepDuration) / sweepDuration);
+            
+            if (noaaImg) {
+              ctx.drawImage(noaaImg, 0, 0, W, sweepY, 0, 0, W, sweepY);
               
-              const sweepDuration = 18;
-              const sweepY = H * ((t % sweepDuration) / sweepDuration);
-              
-              if (noaaImg) {
-                ctx.drawImage(noaaImg, 0, 0, W, sweepY, 0, 0, W, sweepY);
-                
-                const staticData = ctx.createImageData(W, Math.ceil(H - sweepY));
-                for (let i = 0; i < staticData.data.length; i += 4) {
-                  const val = Math.floor(Math.random() * 60 + 35);
-                  staticData.data[i] = val;
-                  staticData.data[i+1] = val;
-                  staticData.data[i+2] = val;
-                  staticData.data[i+3] = 255;
-                }
-                ctx.putImageData(staticData, 0, Math.ceil(sweepY));
-                
-                ctx.strokeStyle = '#00ff88';
-                ctx.lineWidth = isFullscreen ? 2 : 1;
-                ctx.beginPath();
-                ctx.moveTo(0, sweepY);
-                ctx.lineTo(W, sweepY);
-                ctx.stroke();
-                
-                ctx.fillStyle = '#00ff88';
-                ctx.font = isFullscreen ? '10px Courier New' : '6px Courier New';
-                ctx.fillText("APT LOCK OK", 6, isFullscreen ? 14 : 10);
-              } else {
-                ctx.fillStyle = '#020710';
-                ctx.fillRect(0, 0, W, H);
-                ctx.fillStyle = '#8fa0b5';
-                ctx.font = isFullscreen ? '11px sans-serif' : '6px sans-serif';
-                ctx.fillText("DECODING NOAA PICTURE...", 12, H/2);
-              }
-            } else {
-              const staticData = ctx.createImageData(W, H);
+              const staticData = ctx.createImageData(W, Math.ceil(H - sweepY));
               for (let i = 0; i < staticData.data.length; i += 4) {
-                const val = Math.floor(Math.random() * 110 + 20);
+                const val = Math.floor(Math.random() * 60 + 35);
                 staticData.data[i] = val;
                 staticData.data[i+1] = val;
                 staticData.data[i+2] = val;
                 staticData.data[i+3] = 255;
               }
-              ctx.putImageData(staticData, 0, 0);
+              ctx.putImageData(staticData, 0, Math.ceil(sweepY));
               
-              ctx.fillStyle = '#ff0055';
+              ctx.strokeStyle = '#00ff88';
+              ctx.lineWidth = isFullscreen ? 2 : 1;
+              ctx.beginPath();
+              ctx.moveTo(0, sweepY);
+              ctx.lineTo(W, sweepY);
+              ctx.stroke();
+              
+              ctx.fillStyle = '#00ff88';
               ctx.font = isFullscreen ? '10px Courier New' : '6px Courier New';
-              ctx.fillText("APT SYNC LOST", 6, isFullscreen ? 14 : 10);
+              ctx.fillText("APT LOCK OK", 6, isFullscreen ? 14 : 10);
+            } else {
+              ctx.fillStyle = '#020710';
+              ctx.fillRect(0, 0, W, H);
+              ctx.fillStyle = '#8fa0b5';
+              ctx.font = isFullscreen ? '11px sans-serif' : '6px sans-serif';
+              ctx.fillText("DECODING NOAA PICTURE...", 12, H/2);
             }
           } else {
-            ctx.strokeStyle = 'rgba(90, 122, 154, 0.08)';
-            ctx.lineWidth = 1;
-            for (let x = 0; x < W; x += 15) {
-              ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+            const staticData = ctx.createImageData(W, H);
+            for (let i = 0; i < staticData.data.length; i += 4) {
+              const val = Math.floor(Math.random() * 110 + 20);
+              staticData.data[i] = val;
+              staticData.data[i+1] = val;
+              staticData.data[i+2] = val;
+              staticData.data[i+3] = 255;
             }
-            for (let y = 0; y < H; y += 12) {
-              ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-            }
+            ctx.putImageData(staticData, 0, 0);
             
-            ctx.strokeStyle = '#00e5ff';
-            ctx.lineWidth = isFullscreen ? 2.5 : 1.5;
-            ctx.beginPath();
-            const amp = (14 + 2 * Math.sin(t * 0.5)) * (H / 65);
-            ctx.moveTo(0, H/2);
-            for (let x = 0; x < W; x++) {
-              const angle = x * (isFullscreen ? 0.04 : 0.08) + t * 4.5 + 3.5 * Math.sin(x * 0.02 + t * 1.5);
-              const y = H/2 + amp * Math.sin(angle);
-              ctx.lineTo(x, y);
-            }
-            ctx.stroke();
-            
-            ctx.fillStyle = 'rgba(0, 229, 255, 0.9)';
-            ctx.font = isFullscreen ? '9px monospace' : '7px monospace';
-            ctx.fillText("FM AUDIO ANALYZER", 6, isFullscreen ? 14 : 10);
+            ctx.fillStyle = '#ff0055';
+            ctx.font = isFullscreen ? '10px Courier New' : '6px Courier New';
+            ctx.fillText("APT SYNC LOST", 6, isFullscreen ? 14 : 10);
           }
+        } else if (decoderTab === 'satdump' && isMeteor) {
+          // SatDump Meteor LRPT image simulation
+          const isSignalOk = info && info.signal_strength_dbm > -95;
+          if (isSignalOk) {
+            // Draw a green/blue false-color satellite image scanning line
+            const scaleY = H / 65;
+            const sweepY = H * ((t % 25) / 25);
+            ctx.fillStyle = '#001830';
+            ctx.fillRect(0, 0, W, H);
+            
+            // Draw simulated green earth land shape
+            ctx.fillStyle = '#105a30';
+            ctx.beginPath();
+            ctx.arc(W/2 + 20 * Math.sin(t*0.05), H + 40 * scaleY, 70 * scaleY, Math.PI, 0);
+            ctx.fill();
+            
+            // Draw cloud cover overlay (white transparent)
+            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+            ctx.beginPath();
+            ctx.arc(W/3, H/2 - 10, 20, 0, Math.PI*2);
+            ctx.arc(W * 0.7, H/2 + 10, 15, 0, Math.PI*2);
+            ctx.fill();
+            
+            // Static noise below scan line
+            const staticData = ctx.createImageData(W, Math.ceil(H - sweepY));
+            for (let i = 0; i < staticData.data.length; i += 4) {
+              const val = Math.floor(Math.random() * 40 + 15);
+              staticData.data[i] = val;
+              staticData.data[i+1] = val + 10;
+              staticData.data[i+2] = val + 25;
+              staticData.data[i+3] = 255;
+            }
+            ctx.putImageData(staticData, 0, Math.ceil(sweepY));
+
+            ctx.strokeStyle = '#00ff88';
+            ctx.lineWidth = isFullscreen ? 2 : 1;
+            ctx.beginPath();
+            ctx.moveTo(0, sweepY);
+            ctx.lineTo(W, sweepY);
+            ctx.stroke();
+
+            ctx.fillStyle = '#00ff88';
+            ctx.font = isFullscreen ? '9px monospace' : '6px monospace';
+            ctx.fillText("LRPT LOCK (QPSK)", 6, isFullscreen ? 14 : 10);
+          } else {
+            // Blue static
+            const staticData = ctx.createImageData(W, H);
+            for (let i = 0; i < staticData.data.length; i += 4) {
+              const val = Math.floor(Math.random() * 110 + 20);
+              staticData.data[i] = 10;
+              staticData.data[i+1] = val / 2;
+              staticData.data[i+2] = val;
+              staticData.data[i+3] = 255;
+            }
+            ctx.putImageData(staticData, 0, 0);
+            ctx.fillStyle = '#ff0055';
+            ctx.font = isFullscreen ? '9px monospace' : '6px monospace';
+            ctx.fillText("LRPT SYNC SEARCHING", 6, isFullscreen ? 14 : 10);
+          }
+        } else if (mode === 'FM') {
+          ctx.strokeStyle = 'rgba(90, 122, 154, 0.08)';
+          ctx.lineWidth = 1;
+          for (let x = 0; x < W; x += 15) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+          }
+          for (let y = 0; y < H; y += 12) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+          }
+          
+          ctx.strokeStyle = '#00e5ff';
+          ctx.lineWidth = isFullscreen ? 2.5 : 1.5;
+          ctx.beginPath();
+          const amp = (14 + 2 * Math.sin(t * 0.5)) * (H / 65);
+          ctx.moveTo(0, H/2);
+          for (let x = 0; x < W; x++) {
+            const angle = x * (isFullscreen ? 0.04 : 0.08) + t * 4.5 + 3.5 * Math.sin(x * 0.02 + t * 1.5);
+            const y = H/2 + amp * Math.sin(angle);
+            ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+          
+          ctx.fillStyle = 'rgba(0, 229, 255, 0.9)';
+          ctx.font = isFullscreen ? '9px monospace' : '7px monospace';
+          ctx.fillText("FM AUDIO ANALYZER", 6, isFullscreen ? 14 : 10);
         } else if (mode === 'DAB' && info.slideshow_id) {
           ctx.strokeStyle = 'rgba(0, 229, 255, 0.3)';
           ctx.strokeRect(3, 3, W-6, H-6);
@@ -907,9 +1002,9 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
 
     animId = requestAnimationFrame(drawDecoders);
     return () => cancelAnimationFrame(animId);
-  }, [sdrState.is_receiving, sdrState.mode, sdrState.decoding_info, isFullscreen]);
+  }, [sdrState.is_receiving, sdrState.mode, sdrState.decoding_info, isFullscreen, decoderTab]);
 
-  // Sub-renderer helpers to avoid duplication in layout splits
+  // Sub-renderer helpers
   const renderDiagnosticsCard = () => (
     <div className="sdr-diagnostics-card">
       <div className="diag-grid">
@@ -945,16 +1040,16 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
     <div className={`sdr-alert-banner ${sdrState.connected ? 'confirmed' : sdrState.physical_usb_detected ? 'semi-confirmed' : 'unconfirmed'}`}>
       {sdrState.connected ? (
         <p className="alert-banner-text">
-          🟢 <strong>RTL-SDR CONFIRMED:</strong> Perangkat {sdrState.device_name} terdeteksi. Aliran spektrum RF aktif!
+          🟢 <strong>{sdrState.device_type.toUpperCase()} CONFIRMED:</strong> Perangkat {sdrState.device_name} terdeteksi. Aliran Spektrum Spektral aktif!
         </p>
       ) : sdrState.physical_usb_detected ? (
         <p className="alert-banner-text">
-          ⚠️ <strong>USB TERDETEKSI:</strong> RTL-SDR terhubung secara fisik, namun driver software (pyrtlsdr/librtlsdr) tidak dapat mengaksesnya.
+          ⚠️ <strong>USB TERDETEKSI:</strong> {sdrState.device_type.toUpperCase()} terhubung secara fisik, namun driver software tidak dapat mengaksesnya.
           <button className="banner-link-btn" onClick={() => setShowTroubleshooting(true)}>Buka Panduan Driver</button>
         </p>
       ) : (
         <p className="alert-banner-text">
-          🔴 <strong>RTL-SDR NOT FOUND:</strong> Pasangkan dongle RTL-SDR ke port USB untuk pelacakan sinyal satelit real-time.
+          🔴 <strong>SDR NOT FOUND:</strong> Pasangkan dongle RTL-SDR atau Airspy ke port USB untuk pelacakan sinyal satelit real-time.
           <button className="banner-link-btn" onClick={() => setShowTroubleshooting(true)}>Bantuan Koneksi</button>
         </p>
       )}
@@ -965,7 +1060,7 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
     showTroubleshooting && (
       <div className="trouble-guide-box">
         <div className="guide-header">
-          <h4>PANDUAN INTEGRASI RTL-SDR & PYTHON</h4>
+          <h4>PANDUAN INTEGRASI RTL-SDR / AIRSPY</h4>
           <button className="guide-close-btn" onClick={() => setShowTroubleshooting(false)}>Tutup</button>
         </div>
         <div className="guide-content">
@@ -974,7 +1069,7 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
           <pre className="guide-code-block">python sdr_server.py</pre>
           
           <h5>2. Driver WinUSB (Windows)</h5>
-          <p>Gunakan <strong>Zadig</strong> untuk mengganti driver Bulk-In, Interface 0 menjadi WinUSB.</p>
+          <p>Gunakan <strong>Zadig</strong> untuk menginstal driver WinUSB untuk RTL-SDR atau Airspy.</p>
         </div>
       </div>
     )
@@ -988,8 +1083,8 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
           <span className="hud-val font-numeric" style={{ color: '#00e5ff' }}>{formatFreq(sdrState.frequency_hz)}</span>
         </div>
         <div className="hud-metric">
-          <span className="hud-lbl">Bandwidth</span>
-          <span className="hud-val font-numeric">2.048 MHz</span>
+          <span className="hud-lbl">Sample Rate</span>
+          <span className="hud-val font-numeric">{(sdrState.sample_rate_hz / 1e6).toFixed(3)} MSPS</span>
         </div>
         <div className="hud-metric">
           <span className="hud-lbl">Mode</span>
@@ -1000,12 +1095,119 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
     </div>
   );
 
-  const renderDecoderHud = () => (
-    sdrState.is_receiving && sdrState.decoding_info && (
+  // Dynamic decoder display standard standard standard
+  const renderDecoderHud = () => {
+    if (!sdrState.is_receiving || !sdrState.decoding_info) return null;
+
+    if (decoderTab === 'satdump') {
+      const pipeline = sdrState.satdump_pipeline;
+      if (!pipeline || !pipeline.active) {
+        return (
+          <div className="sdr-decoder-hud">
+            <div className="decoder-hud-title">
+              <div className="sdr-tab-group">
+                <button className="decoder-tab-btn" onClick={() => setDecoderTab('standard')}>STANDARD</button>
+                <button className="decoder-tab-btn active" onClick={() => setDecoderTab('satdump')}>SATDUMP</button>
+              </div>
+              <span className="decoder-hud-badge">SATDUMP PIPELINE</span>
+            </div>
+            <div className="decoder-hud-body" style={{ justifyContent: 'center', padding: '12px' }}>
+              <span style={{ color: '#5a7a9a', fontSize: '0.6rem' }}>Pipeline Inactive. Silakan START RX spektrum terlebih dahulu.</span>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="sdr-decoder-hud">
+          <div className="decoder-hud-title">
+            <div className="sdr-tab-group">
+              <button className="decoder-tab-btn" onClick={() => setDecoderTab('standard')}>STANDARD</button>
+              <button className="decoder-tab-btn active" onClick={() => setDecoderTab('satdump')}>SATDUMP</button>
+            </div>
+            <span className="decoder-hud-badge">SATDUMP LIVE</span>
+          </div>
+
+          <div className="decoder-hud-body">
+            <div className="decoder-hud-details">
+              <div className="decoder-metric-row">
+                <span className="decoder-metric-lbl">Pipeline Name</span>
+                <span className="decoder-metric-val green">{pipeline.pipeline_name}</span>
+              </div>
+              <div className="decoder-metric-row">
+                <span className="decoder-metric-lbl">Demodulator</span>
+                <span className="decoder-metric-val font-numeric">{pipeline.demodulator}</span>
+              </div>
+              <div className="decoder-metric-row">
+                <span className="decoder-metric-lbl">Decimation</span>
+                <span className="decoder-metric-val font-numeric">/{pipeline.decimation}</span>
+              </div>
+              <div className="decoder-metric-row">
+                <span className="decoder-metric-lbl">Symbol Rate</span>
+                <span className="decoder-metric-val font-numeric">{pipeline.symbol_rate.toLocaleString()} S/s</span>
+              </div>
+              <div className="decoder-metric-row">
+                <span className="decoder-metric-lbl">Viterbi BER</span>
+                <span className={`decoder-metric-val font-numeric ${pipeline.viterbi_ber < 0.01 ? 'green' : 'yellow'}`}>
+                  {pipeline.viterbi_ber.toExponential(4)}
+                </span>
+              </div>
+              <div className="decoder-metric-row">
+                <span className="decoder-metric-lbl">Reed-Solomon Cor</span>
+                <span className="decoder-metric-val font-numeric green">
+                  {pipeline.rs_corrected[0]} / {pipeline.rs_corrected[1]}
+                </span>
+              </div>
+              <div className="decoder-metric-row">
+                <span className="decoder-metric-lbl">Frames Decoded</span>
+                <span className="decoder-metric-val font-numeric">{pipeline.frames_decoded.toLocaleString()}</span>
+              </div>
+              <div className="decoder-metric-row">
+                <span className="decoder-metric-lbl">Sync Tracking</span>
+                <span className={`decoder-metric-val ${pipeline.sync_locked ? 'green' : 'err'}`}>
+                  {pipeline.sync_locked ? 'SYNC LOCKED' : 'SEARCHING SYNC'}
+                </span>
+              </div>
+
+              {/* Progress Bar for Image Decode */}
+              {pipeline.image_decoding_percent > 0 && (
+                <div style={{ marginTop: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.45rem', color: '#5a7a9a', marginBottom: '2px' }}>
+                    <span>IMAGE RECONSTRUCTION PROGRESS</span>
+                    <span>{pipeline.image_decoding_percent}%</span>
+                  </div>
+                  <div style={{ width: '100%', height: '3px', background: 'rgba(90, 122, 154, 0.2)', borderRadius: '1.5px', overflow: 'hidden' }}>
+                    <div style={{ width: `${pipeline.image_decoding_percent}%`, height: '100%', background: '#00ff88', transition: 'width 0.3s ease' }} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="decoder-hud-visuals">
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                <canvas ref={constellationCanvasRef} width={constSize} height={constSize} className={`sdr-constellation-canvas ${isFullscreen ? 'fullscreen' : ''}`} />
+                <span style={{ fontSize: '0.45rem', color: '#5a7a9a', fontWeight: 'bold' }}>CONSTELLATION IQ</span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                <canvas ref={videoCanvasRef} width={vidWidth} height={vidHeight} className={`sdr-video-canvas ${isFullscreen ? 'fullscreen' : ''}`} />
+                <span style={{ fontSize: '0.45rem', color: '#5a7a9a', fontWeight: 'bold' }}>IMAGE/DATA PIPELINE</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Standard conventional tab
+    return (
       <div className="sdr-decoder-hud">
         <div className="decoder-hud-title">
-          <h4>PENGURAI SINYAL / DECODER HUD</h4>
-          <span className="decoder-hud-badge">{sdrState.mode} MODE</span>
+          <div className="sdr-tab-group">
+            <button className="decoder-tab-btn active" onClick={() => setDecoderTab('standard')}>STANDARD</button>
+            <button className="decoder-tab-btn" onClick={() => setDecoderTab('satdump')}>SATDUMP</button>
+          </div>
+          <span className="decoder-hud-badge">{sdrState.mode} DECODER</span>
         </div>
         
         <div className="decoder-hud-body">
@@ -1112,9 +1314,7 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
 
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
               <canvas ref={videoCanvasRef} width={vidWidth} height={vidHeight} className={`sdr-video-canvas ${isFullscreen ? 'fullscreen' : ''}`} />
-              <span style={{ fontSize: '0.45rem', color: '#5a7a9a', fontWeight: 'bold' }}>
-                {sdrState.mode === 'FM' ? 'AUDIO WAVE' : sdrState.mode === 'DAB' ? 'SLIDESHOW' : 'TV DECODER'}
-              </span>
+              <span style={{ fontSize: '0.45rem', color: '#5a7a9a', fontWeight: 'bold' }}>AUDIO WAVE</span>
             </div>
           </div>
         </div>
@@ -1149,8 +1349,8 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
           </div>
         )}
       </div>
-    )
-  );
+    );
+  };
 
   const renderReceiverControls = () => (
     <div className="sdr-receiver-controls">
@@ -1164,7 +1364,6 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
           <span>{sdrState.is_receiving ? 'STOP RX' : 'START RX'}</span>
         </button>
 
-        {/* Volume & Mute Interface */}
         {sdrState.is_receiving && (
           <div className="sdr-audio-controls">
             <button 
@@ -1215,6 +1414,22 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
 
       {showSettings && (
         <div className="sdr-settings-panel">
+          {/* Hardware Device Selection */}
+          <div className="setting-control-row">
+            <span className="setting-label">Hardware Device</span>
+            <div className="setting-btn-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+              {['rtl-sdr', 'airspy'].map(d => (
+                <button 
+                  key={d} 
+                  className={`setting-btn ${sdrState.device_type === d ? 'active' : ''}`}
+                  onClick={() => updateSetting('device_type', d)}
+                >
+                  {d === 'rtl-sdr' ? 'RTL-SDR Dongle' : 'Airspy SDR'}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="setting-control-row">
             <span className="setting-label">Mode Demodulasi</span>
             <div className="setting-btn-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
@@ -1230,20 +1445,101 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
             </div>
           </div>
 
-          <div className="setting-control-row">
-            <span className="setting-label">SDR Gain</span>
-            <div className="setting-btn-grid select">
-              {['auto', '20.7', '32.8', '49.6'].map(g => (
-                <button 
-                  key={g} 
-                  className={`setting-btn ${sdrState.gain_db === g ? 'active' : ''}`}
-                  onClick={() => updateSetting('gain_db', g)}
-                >
-                  {g === 'auto' ? 'AGC' : g + 'dB'}
-                </button>
-              ))}
+          {/* Sample Rate selection based on device type */}
+          {sdrState.device_type === 'airspy' ? (
+            <div className="setting-control-row">
+              <span className="setting-label">Airspy Sample Rate</span>
+              <div className="setting-btn-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+                {[2500000, 10000000].map(sr => (
+                  <button 
+                    key={sr} 
+                    className={`setting-btn ${sdrState.sample_rate_hz === sr ? 'active' : ''}`}
+                    onClick={() => updateSetting('sample_rate', sr)}
+                  >
+                    {(sr / 1e6).toFixed(1)} MSPS
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="setting-control-row">
+              <span className="setting-label">RTL-SDR Sample Rate</span>
+              <div className="setting-btn-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+                {[1024000, 2048000, 2400000, 3200000].map(sr => (
+                  <button 
+                    key={sr} 
+                    className={`setting-btn ${sdrState.sample_rate_hz === sr ? 'active' : ''}`}
+                    onClick={() => updateSetting('sample_rate', sr)}
+                  >
+                    {(sr / 1e6).toFixed(3)} MSPS
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Gain Controls (AGC or Airspy LNA/MIX/VGA sliders) */}
+          {sdrState.device_type === 'airspy' ? (
+            <div className="airspy-gain-sliders-container">
+              <div className="setting-control-row">
+                <span className="setting-label">LNA Gain: {sdrState.airspy_gain_lna}</span>
+                <div className="slider-container">
+                  <input 
+                    type="range" min="0" max="15" 
+                    value={sdrState.airspy_gain_lna} 
+                    onChange={(e) => updateSetting('airspy_gain_lna', parseInt(e.target.value))}
+                    className="setting-slider"
+                  />
+                </div>
+              </div>
+              <div className="setting-control-row" style={{ marginTop: '4px' }}>
+                <span className="setting-label">Mixer Gain: {sdrState.airspy_gain_mix}</span>
+                <div className="slider-container">
+                  <input 
+                    type="range" min="0" max="15" 
+                    value={sdrState.airspy_gain_mix} 
+                    onChange={(e) => updateSetting('airspy_gain_mix', parseInt(e.target.value))}
+                    className="setting-slider"
+                  />
+                </div>
+              </div>
+              <div className="setting-control-row" style={{ marginTop: '4px' }}>
+                <span className="setting-label">VGA Gain: {sdrState.airspy_gain_vga}</span>
+                <div className="slider-container">
+                  <input 
+                    type="range" min="0" max="15" 
+                    value={sdrState.airspy_gain_vga} 
+                    onChange={(e) => updateSetting('airspy_gain_vga', parseInt(e.target.value))}
+                    className="setting-slider"
+                  />
+                </div>
+              </div>
+              <div className="setting-control-row" style={{ marginTop: '6px' }}>
+                <button 
+                  className={`setting-btn ${sdrState.airspy_bias_tee ? 'active' : ''}`}
+                  onClick={() => updateSetting('airspy_bias_tee', !sdrState.airspy_bias_tee)}
+                  style={{ width: '100%', padding: '5px' }}
+                >
+                  Bias-Tee: {sdrState.airspy_bias_tee ? 'ON (12V/4.5V)' : 'OFF'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="setting-control-row">
+              <span className="setting-label">RTL-SDR Gain</span>
+              <div className="setting-btn-grid select">
+                {['auto', '20.7', '32.8', '49.6'].map(g => (
+                  <button 
+                    key={g} 
+                    className={`setting-btn ${sdrState.gain_db === g ? 'active' : ''}`}
+                    onClick={() => updateSetting('gain_db', g)}
+                  >
+                    {g === 'auto' ? 'AGC' : g + 'dB'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="setting-control-row">
             <span className="setting-label">Squelch Threshold</span>

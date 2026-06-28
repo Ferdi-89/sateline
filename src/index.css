@@ -3039,3 +3039,48 @@ canvas.map-area {
     max-height: none;
   }
 }
+
+/* Airspy Gain Sliders Container */
+.airspy-gain-sliders-container {
+  background: rgba(5, 14, 26, 0.4);
+  border: 1px dashed rgba(90, 122, 154, 0.2);
+  border-radius: 4px;
+  padding: 8px;
+  margin-bottom: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* SatDump Tab Navigation */
+.sdr-tab-group {
+  display: flex;
+  background: rgba(4, 11, 24, 0.6);
+  border: 1px solid rgba(90, 122, 154, 0.25);
+  border-radius: 3px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.decoder-tab-btn {
+  background: transparent;
+  border: none;
+  color: #8fa0b5;
+  font-family: inherit;
+  font-size: 0.52rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.decoder-tab-btn:hover {
+  color: #ffffff;
+}
+
+.decoder-tab-btn.active {
+  background: rgba(0, 229, 255, 0.12);
+  color: #00e5ff;
+  border: 1px solid rgba(0, 229, 255, 0.2);
+}
