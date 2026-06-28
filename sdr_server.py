@@ -393,6 +393,35 @@ def get_decoding_info(mode, is_receiving):
         signal_ok = True
         
     if mode == "FM":
+        # Check if NOAA weather satellite frequency
+        mhz = sdr_state.get("frequency_hz", 0) / 1e6
+        is_noaa = abs(mhz - 137.620) < 0.01 or abs(mhz - 137.9125) < 0.01 or abs(mhz - 137.100) < 0.01
+        
+        if is_noaa:
+            sat_name = "NOAA 15"
+            if abs(mhz - 137.9125) < 0.01: sat_name = "NOAA 18"
+            elif abs(mhz - 137.100) < 0.01: sat_name = "NOAA 19"
+            
+            if is_real and not signal_ok:
+                return {
+                    "signal_strength_dbm": rssi,
+                    "snr_db": snr,
+                    "satellite": sat_name,
+                    "subcarrier_locked": False,
+                    "sync_status": "NO SYNC",
+                    "scan_rate_lpm": 0,
+                    "audio_state": "Low signal / Static noise"
+                }
+            return {
+                "signal_strength_dbm": rssi,
+                "snr_db": snr,
+                "satellite": sat_name,
+                "subcarrier_locked": True,
+                "sync_status": "SYNC ACTIVE (A & B)",
+                "scan_rate_lpm": 120,
+                "audio_state": "Decoding 2400Hz AM subcarrier"
+            }
+            
         if is_real and not signal_ok:
             return {
                 "signal_strength_dbm": rssi,

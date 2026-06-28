@@ -25,6 +25,7 @@ export default function SdrController({ satellite: sat, simTime }) {
   const canvasRef = useRef(null);
   const constellationCanvasRef = useRef(null);
   const videoCanvasRef = useRef(null);
+  const noaaImagesRef = useRef({ noaa15: null, noaa18: null, noaa19: null });
   const animationRef = useRef(null);
   const waterfallHistoryRef = useRef([]); // holds historical FFT arrays
   const statusIntervalRef = useRef(null);
@@ -37,6 +38,21 @@ export default function SdrController({ satellite: sat, simTime }) {
   ];
   
   const API_BASE = 'http://localhost:8055';
+
+  // Preload NOAA weather satellite images
+  useEffect(() => {
+    const img15 = new Image();
+    img15.src = '/assets/noaa15.jpg';
+    img15.onload = () => { noaaImagesRef.current.noaa15 = img15; };
+
+    const img18 = new Image();
+    img18.src = '/assets/noaa18.jpg';
+    img18.onload = () => { noaaImagesRef.current.noaa18 = img18; };
+
+    const img19 = new Image();
+    img19.src = '/assets/noaa19.jpg';
+    img19.onload = () => { noaaImagesRef.current.noaa19 = img19; };
+  }, []);
 
   // Format frequency to MHz string
   const formatFreq = (hz) => {
@@ -469,31 +485,97 @@ export default function SdrController({ satellite: sat, simTime }) {
         const t = Date.now() / 1000;
         
         if (mode === 'FM') {
-          // Draw modulated FM oscilloscope
-          ctx.strokeStyle = 'rgba(90, 122, 154, 0.08)';
-          ctx.lineWidth = 1;
-          for (let x = 0; x < W; x += 15) {
-            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
-          }
-          for (let y = 0; y < H; y += 12) {
-            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-          }
+          const mhz = sdrState.frequency_hz / 1000000;
+          const isNoaa = Math.abs(mhz - 137.620) < 0.01 || Math.abs(mhz - 137.9125) < 0.01 || Math.abs(mhz - 137.100) < 0.01;
           
-          ctx.strokeStyle = '#00e5ff';
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          const amp = 14 + 2 * Math.sin(t * 0.5);
-          ctx.moveTo(0, H/2);
-          for (let x = 0; x < W; x++) {
-            const angle = x * 0.08 + t * 4.5 + 3.5 * Math.sin(x * 0.02 + t * 1.5);
-            const y = H/2 + amp * Math.sin(angle);
-            ctx.lineTo(x, y);
+          if (isNoaa) {
+            const isSignalOk = info && info.signal_strength_dbm > -95;
+            
+            if (isSignalOk) {
+              let noaaImg = null;
+              if (Math.abs(mhz - 137.620) < 0.01) noaaImg = noaaImagesRef.current.noaa15;
+              else if (Math.abs(mhz - 137.9125) < 0.01) noaaImg = noaaImagesRef.current.noaa18;
+              else if (Math.abs(mhz - 137.100) < 0.01) noaaImg = noaaImagesRef.current.noaa19;
+              
+              const sweepDuration = 18; // 18 seconds sweep duration
+              const sweepY = H * ((t % sweepDuration) / sweepDuration);
+              
+              if (noaaImg) {
+                // Draw decoded image above the sweep line
+                ctx.drawImage(noaaImg, 0, 0, W, sweepY, 0, 0, W, sweepY);
+                
+                // Draw static noise below the sweep line
+                const staticData = ctx.createImageData(W, Math.ceil(H - sweepY));
+                for (let i = 0; i < staticData.data.length; i += 4) {
+                  const val = Math.floor(Math.random() * 60 + 35);
+                  staticData.data[i] = val;
+                  staticData.data[i+1] = val;
+                  staticData.data[i+2] = val;
+                  staticData.data[i+3] = 255;
+                }
+                ctx.putImageData(staticData, 0, Math.ceil(sweepY));
+                
+                // Draw horizontal bright green sweep line
+                ctx.strokeStyle = '#00ff88';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(0, sweepY);
+                ctx.lineTo(W, sweepY);
+                ctx.stroke();
+                
+                ctx.fillStyle = '#00ff88';
+                ctx.font = '6px Courier New';
+                ctx.fillText("APT LOCK OK", 6, 10);
+              } else {
+                ctx.fillStyle = '#020710';
+                ctx.fillRect(0, 0, W, H);
+                ctx.fillStyle = '#8fa0b5';
+                ctx.font = '6px sans-serif';
+                ctx.fillText("DECODING NOAA PICTURE...", 12, H/2);
+              }
+            } else {
+              // Full static noise (no signal)
+              const staticData = ctx.createImageData(W, H);
+              for (let i = 0; i < staticData.data.length; i += 4) {
+                const val = Math.floor(Math.random() * 110 + 20);
+                staticData.data[i] = val;
+                staticData.data[i+1] = val;
+                staticData.data[i+2] = val;
+                staticData.data[i+3] = 255;
+              }
+              ctx.putImageData(staticData, 0, 0);
+              
+              ctx.fillStyle = '#ff0055';
+              ctx.font = '6px Courier New';
+              ctx.fillText("APT SYNC LOST", 6, 10);
+            }
+          } else {
+            // Draw modulated FM oscilloscope (standard FM mode)
+            ctx.strokeStyle = 'rgba(90, 122, 154, 0.08)';
+            ctx.lineWidth = 1;
+            for (let x = 0; x < W; x += 15) {
+              ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+            }
+            for (let y = 0; y < H; y += 12) {
+              ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+            }
+            
+            ctx.strokeStyle = '#00e5ff';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            const amp = 14 + 2 * Math.sin(t * 0.5);
+            ctx.moveTo(0, H/2);
+            for (let x = 0; x < W; x++) {
+              const angle = x * 0.08 + t * 4.5 + 3.5 * Math.sin(x * 0.02 + t * 1.5);
+              const y = H/2 + amp * Math.sin(angle);
+              ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+            
+            ctx.fillStyle = 'rgba(0, 229, 255, 0.9)';
+            ctx.font = '7px monospace';
+            ctx.fillText("FM AUDIO ANALYZER", 6, 10);
           }
-          ctx.stroke();
-          
-          ctx.fillStyle = 'rgba(0, 229, 255, 0.9)';
-          ctx.font = '7px monospace';
-          ctx.fillText("FM AUDIO ANALYZER", 6, 10);
         } else if (mode === 'DAB' && info.slideshow_id) {
           ctx.strokeStyle = 'rgba(0, 229, 255, 0.3)';
           ctx.strokeRect(3, 3, W-6, H-6);
@@ -769,16 +851,41 @@ export default function SdrController({ satellite: sat, simTime }) {
 
               {sdrState.mode === 'FM' && (
                 <>
-                  <div className="decoder-metric-row">
-                    <span className="decoder-metric-lbl">Stereo Pilot</span>
-                    <span className="decoder-metric-val green">LOCKED</span>
-                  </div>
-                  <div className="decoder-metric-row">
-                    <span className="decoder-metric-lbl">Audio Peak</span>
-                    <span className="decoder-metric-val font-numeric">
-                      {sdrState.decoding_info.audio_freq_hz} Hz
-                    </span>
-                  </div>
+                  {sdrState.decoding_info.satellite ? (
+                    <>
+                      <div className="decoder-metric-row">
+                        <span className="decoder-metric-lbl">Satellite</span>
+                        <span className="decoder-metric-val green">{sdrState.decoding_info.satellite}</span>
+                      </div>
+                      <div className="decoder-metric-row">
+                        <span className="decoder-metric-lbl">Subcarrier 2.4k</span>
+                        <span className={`decoder-metric-val ${sdrState.decoding_info.subcarrier_locked ? 'green' : 'yellow'}`}>
+                          {sdrState.decoding_info.subcarrier_locked ? 'LOCKED' : 'UNLOCKED'}
+                        </span>
+                      </div>
+                      <div className="decoder-metric-row">
+                        <span className="decoder-metric-lbl">Sync Status</span>
+                        <span className={`decoder-metric-val ${sdrState.decoding_info.subcarrier_locked ? 'green' : 'warn'}`}>{sdrState.decoding_info.sync_status}</span>
+                      </div>
+                      <div className="decoder-metric-row">
+                        <span className="decoder-metric-lbl">Scan Rate</span>
+                        <span className="decoder-metric-val font-numeric">{sdrState.decoding_info.scan_rate_lpm} LPM</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="decoder-metric-row">
+                        <span className="decoder-metric-lbl">Stereo Pilot</span>
+                        <span className="decoder-metric-val green">LOCKED</span>
+                      </div>
+                      <div className="decoder-metric-row">
+                        <span className="decoder-metric-lbl">Audio Peak</span>
+                        <span className="decoder-metric-val font-numeric">
+                          {sdrState.decoding_info.audio_freq_hz} Hz
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
 
@@ -840,11 +947,20 @@ export default function SdrController({ satellite: sat, simTime }) {
           </div>
 
           {/* RDS Marquee / Service Bar */}
-          {sdrState.mode === 'FM' && sdrState.decoding_info.rds && (
-            <div className="rds-marquee-container">
-              <div className="rds-station-name">{sdrState.decoding_info.rds.station}</div>
-              <div className="rds-text-scroll">{sdrState.decoding_info.rds.text}</div>
-            </div>
+          {sdrState.mode === 'FM' && (
+            sdrState.decoding_info.rds ? (
+              <div className="rds-marquee-container">
+                <div className="rds-station-name">{sdrState.decoding_info.rds.station}</div>
+                <div className="rds-text-scroll">{sdrState.decoding_info.rds.text}</div>
+              </div>
+            ) : sdrState.decoding_info.satellite ? (
+              <div className="rds-marquee-container">
+                <div className="rds-station-name" style={{ color: '#00ff88', borderColor: 'rgba(0,255,136,0.3)' }}>DECODER</div>
+                <div style={{ color: '#e0e6ed', fontSize: '0.55rem', fontWeight: 'bold' }}>
+                  {sdrState.decoding_info.audio_state}
+                </div>
+              </div>
+            ) : null
           )}
 
           {sdrState.mode === 'DAB' && (
