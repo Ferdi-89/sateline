@@ -320,101 +320,9 @@ def generate_waterfall_data(center_freq, bandwidth, num_bins=128):
     sdr_state["real_snr"] = None
     sdr_state["real_signal_present"] = None
 
-    # High-Fidelity Simulation Mode
-    fft_data = [random.normalvariate(-78.0, 2.0) for _ in range(num_bins)]
-    
-    if not sdr_state["is_receiving"]:
-        return fft_data
-
-    mode = sdr_state.get("mode", "FM")
-    t = time.time()
-
-    if mode == "DVB-T":
-        center_bin = num_bins // 2
-        width = int(num_bins * 0.65)
-        start = center_bin - width // 2
-        end = center_bin + width // 2
-        for i in range(num_bins):
-            if start <= i <= end:
-                sig = -42.0 + random.normalvariate(0, 1.2)
-                if i % 8 == 0:
-                    sig += 5.0
-                elif i == start or i == end:
-                    sig -= 10.0
-                fft_data[i] = 10 * math.log10(10**(fft_data[i]/10) + 10**(sig/10))
-                
-    elif mode == "DAB":
-        center_bin = num_bins // 2
-        width = int(num_bins * 0.28)
-        start = center_bin - width // 2
-        end = center_bin + width // 2
-        for i in range(num_bins):
-            if start <= i <= end:
-                sig = -45.0 + random.normalvariate(0, 0.9)
-                if i % 6 == 0:
-                    sig += 4.0
-                elif i == start or i == end:
-                    sig -= 8.0
-                fft_data[i] = 10 * math.log10(10**(fft_data[i]/10) + 10**(sig/10))
-                
-    elif mode == "AM":
-        center_bin = num_bins // 2
-        for i in range(num_bins):
-            dist = abs(i - center_bin)
-            if dist == 0:
-                sig = -32.0 + random.normalvariate(0, 0.5)
-            elif dist <= 3:
-                sig = -52.0 - (dist * 4) + random.normalvariate(0, 1.2)
-            else:
-                continue
-            fft_data[i] = 10 * math.log10(10**(fft_data[i]/10) + 10**(sig/10))
-            
-    elif mode in ("USB", "LSB"):
-        center_bin = num_bins // 2
-        offset = 4 if mode == "USB" else -4
-        peak_bin = center_bin + offset
-        for i in range(num_bins):
-            dist = abs(i - peak_bin)
-            if dist <= 3:
-                sig = -38.0 - (dist * 7) + random.normalvariate(0, 1.3)
-                fft_data[i] = 10 * math.log10(10**(fft_data[i]/10) + 10**(sig/10))
-                
-    else: # FM / WFM
-        center_bin = num_bins // 2
-        for i in range(num_bins):
-            dist = abs(i - center_bin)
-            if dist == 0:
-                sig = -36.0 + 3.0 * math.sin(t * 1.5) + random.normalvariate(0, 0.8)
-            elif dist <= 2:
-                sig = -46.0 - (dist * 5) + random.normalvariate(0, 1.1)
-            else:
-                continue
-            fft_data[i] = 10 * math.log10(10**(fft_data[i]/10) + 10**(sig/10))
-
-        target_sat_freq = 435880000
-        freq_diff = abs(center_freq - target_sat_freq)
-        if freq_diff < (bandwidth / 2):
-            doppler_shift = 6000 * math.sin(t / 45.0)
-            signal_offset = (target_sat_freq + doppler_shift) - center_freq
-            bin_position = int(((signal_offset / bandwidth) + 0.5) * num_bins)
-            if 0 <= bin_position < num_bins:
-                for i in range(num_bins):
-                    dist = abs(i - bin_position)
-                    if dist == 0:
-                        sig_strength = -40.0 + 4.0 * math.sin(t / 4.0) + random.normalvariate(0, 1.0)
-                    elif dist <= 2:
-                        sig_strength = -52.0 - (dist * 9) + random.normalvariate(0, 1.5)
-                    else:
-                        continue
-                    fft_data[i] = 10 * math.log10(10**(fft_data[i]/10) + 10**(sig_strength/10))
-
-    birdie_bin = int(num_bins * 0.20)
-    for i in range(num_bins):
-        dist = abs(i - birdie_bin)
-        if dist < 2:
-            birdie_strength = -38.0 - (dist * 12) + random.normalvariate(0, 0.4)
-            fft_data[i] = 10 * math.log10(10**(fft_data[i]/10) + 10**(birdie_strength/10))
-
+    # Strict Real Data Mode: Return flat background noise floor without any faked signals/peaks.
+    # This prevents the app from displaying synthetic satellite carriers if the USB device is unplugged.
+    fft_data = [random.normalvariate(-105.0, 0.8) for _ in range(num_bins)]
     return fft_data
 
 
@@ -430,14 +338,25 @@ def get_decoding_info(mode, is_receiving):
     
     is_real = real_snr is not None and real_rssi is not None
     
-    if is_real:
-        rssi = real_rssi
-        snr = real_snr
-        signal_ok = real_signal_present
-    else:
-        rssi = int(-48.0 + 3.0 * math.sin(t / 4.0) + random.randint(-1, 1))
-        snr = round(25.4 + 1.8 * math.sin(t / 5.0) + random.uniform(-0.4, 0.4), 1)
-        signal_ok = True
+    if not is_real:
+        return {
+            "signal_strength_dbm": -120,
+            "snr_db": 0.0,
+            "carrier_lock": False,
+            "subcarrier_locked": False,
+            "sync_status": "DEVICE OFFLINE",
+            "audio_state": "Offline - Check SDR USB Connection",
+            "satellite": "None",
+            "rds": {
+                "station": "OFFLINE",
+                "pty": "None",
+                "text": "SDR hardware not connected or driver not accessible."
+            }
+        }
+        
+    rssi = real_rssi
+    snr = real_snr
+    signal_ok = real_signal_present
         
     if mode == "FM":
         mhz = sdr_state.get("frequency_hz", 0) / 1e6
@@ -649,7 +568,23 @@ def get_satdump_pipeline_info():
     
     real_snr = sdr_state.get("real_snr")
     is_real = real_snr is not None
-    snr = real_snr if is_real else 25.4 + 1.8 * math.sin(t / 5.0)
+    if not is_real:
+        return {
+            "active": False,
+            "pipeline_name": "Offline",
+            "sampler": "None",
+            "demodulator": "None",
+            "input_samplerate": sdr_state["sample_rate_hz"],
+            "decimation": 1,
+            "symbol_rate": 0,
+            "viterbi_ber": 0.5,
+            "rs_corrected": [0, 0],
+            "frames_decoded": 0,
+            "image_decoding_percent": 0.0,
+            "sync_locked": False
+        }
+    
+    snr = real_snr
     signal_locked = snr > 11.0
 
     pipeline_active = True
