@@ -19,6 +19,18 @@ import subprocess
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs
 
+# Add the 'driver' directory to the system PATH and DLL search directory
+# so that python and subprocesses can find dlls and executables (like rtl_test, rtl_sdr)
+driver_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'driver'))
+if os.path.exists(driver_dir):
+    os.environ["PATH"] = driver_dir + os.pathsep + os.environ.get("PATH", "")
+    # For Python 3.8+ on Windows, add dll directory explicitly
+    if sys.platform == 'win32' and hasattr(os, 'add_dll_directory'):
+        try:
+            os.add_dll_directory(driver_dir)
+        except Exception as e:
+            print(f"Warning: Could not add DLL directory: {e}", file=sys.stderr)
+
 PORT = 8055
 
 # Try to import pyrtlsdr (optional dependency)
@@ -463,14 +475,45 @@ def get_decoding_info(mode, is_receiving):
             "AMSAT INDONESIA - ORARI & LAPAN",
             "PRAMBORS FM TERESTRIAL BROADCAST"
         ]
+        station_name = "IO-86/PRAMBORS" if not is_real else "REAL FM BROADCAST"
+        if abs(mhz - 4199.0) < 0.05 or abs(mhz - 951.0) < 0.05:
+            station_name = "TELKOM-4"
+            rds_messages = [
+                "TELKOM-4 (MERAH PUTIH) BEACON ACTIVE",
+                "BEACON FREQ: 4199.000 MHZ C-BAND",
+                "LNB IF DOWNLINK: 951.000 MHZ",
+                "TRANSPONDERS: 60 C-BAND ACTIVE",
+                "OPERATOR: TELKOM INDONESIA",
+                "MISSION: TV BROADCAST & VSAT DATA"
+            ]
+        elif abs(mhz - 4185.0) < 0.05 or abs(mhz - 965.0) < 0.05:
+            station_name = "BRISAT"
+            rds_messages = [
+                "BRISAT BEACON TRANSMITTING",
+                "BEACON FREQ: 4185.000 MHZ C-BAND",
+                "LNB IF DOWNLINK: 965.000 MHZ",
+                "TRANSPONDERS: 36 C / 9 KU ACTIVE",
+                "OPERATOR: BANK RAKYAT INDONESIA",
+                "MISSION: SECURE BANKING NETWORK"
+            ]
+        elif abs(mhz - 20200.0) < 0.05 or abs(mhz - 950.0) < 0.05:
+            station_name = "SATRIA-1"
+            rds_messages = [
+                "SATRIA-1 BEACON TRANSMITTING",
+                "BEACON FREQ: 20200.000 MHZ KA-BAND",
+                "LNB IF DOWNLINK: 950.000 MHZ",
+                "CAPACITY: 150 GBPS HIGH THROUGHPUT",
+                "OPERATOR: PSN / INDONESIA",
+                "MISSION: REMOTE AREA BROADBAND INTERNET"
+            ]
         msg_idx = int(t / 6) % len(rds_messages)
         return {
             "signal_strength_dbm": rssi,
             "stereo": snr > 15.0,
             "snr_db": snr,
             "rds": {
-                "station": "IO-86/PRAMBORS" if not is_real else "REAL FM BROADCAST",
-                "pty": "Science/Pop",
+                "station": station_name,
+                "pty": "Science/Pop" if "IO-86" in station_name or "PRAMBORS" in station_name else "Telecom/Data",
                 "text": rds_messages[msg_idx]
             },
             "audio_freq_hz": int(800 + 350 * math.sin(t)) if snr > 10.0 else 0
@@ -648,6 +691,36 @@ def get_satdump_pipeline_info():
         viterbi_ber = 0.0001 if signal_locked else 0.5
         rs_corrected = [int(12 + t * 0.1) % 100, 0] if signal_locked else [0, 2]
         frames_decoded = int(t * 0.1) % 500
+        image_decoding_percent = 100.0
+        sync_locked = signal_locked
+
+    elif abs(mhz - 4199.0) < 0.05 or abs(mhz - 951.0) < 0.05:
+        pipeline_name = "Telkom-4 C-Band Carrier Telemetry"
+        demodulator = "QPSK / 8PSK Demod"
+        symbol_rate = 30000000
+        viterbi_ber = 0.00001 if signal_locked else 0.4
+        rs_corrected = [int(150 + t * 0.5) % 2000, 0] if signal_locked else [0, 15]
+        frames_decoded = int(t * 5) % 100000
+        image_decoding_percent = 100.0
+        sync_locked = signal_locked
+
+    elif abs(mhz - 4185.0) < 0.05 or abs(mhz - 965.0) < 0.05:
+        pipeline_name = "BRISat Financial Network Link"
+        demodulator = "GMSK / QPSK Demod"
+        symbol_rate = 15000000
+        viterbi_ber = 0.00001 if signal_locked else 0.4
+        rs_corrected = [int(50 + t * 0.2) % 1000, 0] if signal_locked else [0, 8]
+        frames_decoded = int(t * 2.5) % 50000
+        image_decoding_percent = 100.0
+        sync_locked = signal_locked
+
+    elif abs(mhz - 20200.0) < 0.05 or abs(mhz - 950.0) < 0.05:
+        pipeline_name = "SATRIA-1 HTS Ka-Band Link"
+        demodulator = "APSK / 16APSK Demod"
+        symbol_rate = 45000000
+        viterbi_ber = 0.000001 if signal_locked else 0.3
+        rs_corrected = [int(300 + t * 1.2) % 5000, 0] if signal_locked else [0, 45]
+        frames_decoded = int(t * 15) % 300000
         image_decoding_percent = 100.0
         sync_locked = signal_locked
 

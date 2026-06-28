@@ -826,6 +826,117 @@ export default function SelectedSatellitePanel({
         </>
       )}
 
+      {/* Radio & Mission Info for Telkom-4 (Merah Putih) */}
+      {(sat.name.includes('TELKOM-4') || sat.name.includes('Telkom-4') || (kep && (kep.noradId === '43587' || kep.noradId === 43587))) && (
+        <>
+          <div className="details-divider"></div>
+          <div className="details-section">
+            <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Radio size={12} className="section-icon" style={{ color: color }} />
+              TELKOM-4 (MERAH PUTIH) SPECIFICATIONS
+            </h3>
+            <table className="details-table">
+              <tbody>
+                <tr>
+                  <td>C-Band Beacon (RF)</td>
+                  <td>4199.000 MHz</td>
+                </tr>
+                <tr>
+                  <td>LNB IF (Intermediate)</td>
+                  <td>951.000 MHz (LO: 5150 MHz)</td>
+                </tr>
+                <tr>
+                  <td>Capacity</td>
+                  <td>60 C-Band Transponders</td>
+                </tr>
+                <tr>
+                  <td>Operator / Country</td>
+                  <td>Telkom Indonesia / Indonesia 🇮🇩</td>
+                </tr>
+                <tr>
+                  <td>Primary Mission</td>
+                  <td>Satellite TV, VSAT, and High-capacity Telecom</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* Radio & Mission Info for BRISat */}
+      {(sat.name.includes('BRISat') || sat.name.includes('Brisat') || (kep && (kep.noradId === '41591' || kep.noradId === 41591))) && (
+        <>
+          <div className="details-divider"></div>
+          <div className="details-section">
+            <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Radio size={12} className="section-icon" style={{ color: color }} />
+              BRISAT SPECIFICATIONS
+            </h3>
+            <table className="details-table">
+              <tbody>
+                <tr>
+                  <td>C-Band Beacon (RF)</td>
+                  <td>4185.000 MHz</td>
+                </tr>
+                <tr>
+                  <td>LNB IF (Intermediate)</td>
+                  <td>965.000 MHz (LO: 5150 MHz)</td>
+                </tr>
+                <tr>
+                  <td>Capacity</td>
+                  <td>36 C-band & 9 Ku-band Transponders</td>
+                </tr>
+                <tr>
+                  <td>Operator / Country</td>
+                  <td>Bank Rakyat Indonesia / Indonesia 🇮🇩</td>
+                </tr>
+                <tr>
+                  <td>Primary Mission</td>
+                  <td>Dedicated Banking & Financial Communication Network</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* Radio & Mission Info for SATRIA-1 (Nusantara) */}
+      {(sat.name.includes('SATRIA-1') || sat.name.includes('Satria-1') || sat.name.includes('Nusantara') || (kep && (kep.noradId === '57045' || kep.noradId === 57045))) && (
+        <>
+          <div className="details-divider"></div>
+          <div className="details-section">
+            <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Radio size={12} className="section-icon" style={{ color: color }} />
+              SATRIA-1 (NUSANTARA) SPECIFICATIONS
+            </h3>
+            <table className="details-table">
+              <tbody>
+                <tr>
+                  <td>Ka-Band Beacon (RF)</td>
+                  <td>20200.000 MHz (20.20 GHz)</td>
+                </tr>
+                <tr>
+                  <td>LNB IF (Intermediate)</td>
+                  <td>950.000 MHz (LO: 19.25 GHz)</td>
+                </tr>
+                <tr>
+                  <td>Capacity</td>
+                  <td>150 Gbps High Throughput Satellite (Ka-band)</td>
+                </tr>
+                <tr>
+                  <td>Operator / Country</td>
+                  <td>PT Pasifik Satelit Nusantara (PSN) / Indonesia 🇮🇩</td>
+                </tr>
+                <tr>
+                  <td>Primary Mission</td>
+                  <td>Free Broadband Internet for Public Facilities (Schools, Clinics)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
       <div className="details-divider"></div>
 
       {/* Raw TLE Data */}

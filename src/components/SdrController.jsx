@@ -323,6 +323,18 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
       list.push({ label: 'Downlink FM Voice', freq: 435.880, mode: 'FM', desc: 'Repeter Suara / Voice Repeater' });
       list.push({ label: 'APRS Telemetry', freq: 145.825, mode: 'FM', desc: 'Disaster APRS Packet' });
       list.push({ label: 'Uplink FM Voice', freq: 145.880, mode: 'FM', desc: 'Voice Repeater Uplink (PL 88.5)' });
+    } else if (name.includes('TELKOM-4') || name.includes('MERAH PUTI') || name.includes('43587')) {
+      list.push({ label: 'C-Band Beacon (RF)', freq: 4199.000, mode: 'FM', desc: 'Telemetry Beacon Carrier' });
+      list.push({ label: 'C-Band LNB IF', freq: 951.000, mode: 'FM', desc: 'Intermediate Freq (LO: 5150)' });
+      list.push({ label: 'C-Band TV Mux (DVB-T/S)', freq: 951.000, mode: 'DVB-T', desc: 'Simulated Digital TV Stream' });
+    } else if (name.includes('BRISAT') || name.includes('41591')) {
+      list.push({ label: 'C-Band Beacon (RF)', freq: 4185.000, mode: 'FM', desc: 'Telemetry Beacon Carrier' });
+      list.push({ label: 'C-Band LNB IF', freq: 965.000, mode: 'FM', desc: 'Intermediate Freq (LO: 5150)' });
+      list.push({ label: 'Banking Data Stream', freq: 965.000, mode: 'DAB', desc: 'Simulated Encrypted DAB Stream' });
+    } else if (name.includes('SATRIA-1') || name.includes('NUSANTARA') || name.includes('57045')) {
+      list.push({ label: 'Ka-Band Beacon (RF)', freq: 20200.000, mode: 'FM', desc: 'HTS Telemetry Beacon Carrier' });
+      list.push({ label: 'Ka-Band LNB IF', freq: 950.000, mode: 'FM', desc: 'Intermediate Freq (LO: 19.25G)' });
+      list.push({ label: 'Broadband Data Stream', freq: 950.000, mode: 'DAB', desc: 'Simulated High-Speed DAB Stream' });
     } else if (sat.category === 'weather') {
       if (name.includes('NOAA 15')) {
         list.push({ label: 'APT Downlink', freq: 137.620, mode: 'FM', desc: 'Weather Image Transmit' });

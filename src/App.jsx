@@ -44,6 +44,60 @@ function parseTLE(text, category) {
   return sats;
 }
 
+// Helper to fetch satellite from CelesTrak by NORAD ID with a local fallback
+async function fetchSatelliteByNorad(noradId, name, fallbackTle1, fallbackTle2, category = 'other') {
+  const fallback = [{
+    name,
+    tle1: fallbackTle1,
+    tle2: fallbackTle2,
+    category,
+  }];
+  try {
+    const res = await fetch(`https://celestrak.org/NORAD/elements/gp.php?CATNR=${noradId}&FORMAT=tle`);
+    if (res.ok) {
+      const text = await res.text();
+      const sats = parseTLE(text, category);
+      if (sats && sats.length > 0) {
+        sats[0].name = name;
+        return sats;
+      }
+    }
+  } catch (err) {
+    console.warn(`Unable to reach CelesTrak for ${name}, using fallback TLE:`, err);
+  }
+  return fallback;
+}
+
+// Fetch Telkom-4 (Merah Putih)
+async function fetchTelkom4() {
+  return fetchSatelliteByNorad(
+    '43587',
+    'TELKOM-4 (Merah Putih)',
+    '1 43587U 18064A   26171.41343206 .00000000 00000-0 00000+0 0 9995',
+    '2 43587   0.0169  12.0761 0001515 103.4112  49.9772  1.00269652 28915'
+  );
+}
+
+// Fetch BRISat
+async function fetchBrisat() {
+  return fetchSatelliteByNorad(
+    '41591',
+    'BRISat',
+    '1 41591U 16039A   26167.78593465 .00000000 00000-0 00000+0 0 9997',
+    '2 41591   0.0232 337.3604 0001888 105.9123 255.2030  1.00268877 36602'
+  );
+}
+
+// Fetch SATRIA-1 (Nusantara Tiga)
+async function fetchSatria1() {
+  return fetchSatelliteByNorad(
+    '57045',
+    'SATRIA-1 (Nusantara)',
+    '1 57045U 23086A   26158.58838443 -.00000220 00000-0 00000+0 0 9999',
+    '2 57045   0.0374 344.8283 0003568   0.3771 268.6018  1.00269379  9668'
+  );
+}
+
 // Fetch LAPAN-A2 from SatNOGS DB API with a local fallback TLE
 async function fetchLapanA2() {
   const fallback = [{
@@ -146,7 +200,10 @@ function App() {
               return [];
             }
           }),
-          fetchLapanA2()
+          fetchLapanA2(),
+          fetchTelkom4(),
+          fetchBrisat(),
+          fetchSatria1()
         ]);
         // Merge all groups; deduplicate by name
         const seen = new Set();
