@@ -60,7 +60,21 @@ sdr_state = {
     "airspy_gain_lna": 8,
     "airspy_gain_mix": 8,
     "airspy_gain_vga": 8,
-    "airspy_bias_tee": False
+    "airspy_bias_tee": False,
+
+    # SDR# / SatDump Enhancements
+    "bandwidth_hz": 250000,
+    "agc_mode": "auto",
+    "agc_gain": 32,
+    "recording_active": False,
+    "recording_seconds": 0,
+    "recording_size_bytes": 0,
+    "scanner_active": False,
+    "scanner_min_freq": 137000000,
+    "scanner_max_freq": 440000000,
+    "scanner_step_hz": 250000,
+    "waterfall_scheme": "Classic",
+    "last_sim_time": None
 }
 
 # Real SDR instance (if connected)
@@ -768,6 +782,39 @@ class SDRRequestHandler(BaseHTTPRequestHandler):
 
         if path == '/api/status':
             check_rtl_sdr_connection()
+
+            # Run simulation updates
+            now = time.time()
+            if sdr_state["last_sim_time"] is None:
+                sdr_state["last_sim_time"] = now
+            dt = now - sdr_state["last_sim_time"]
+            sdr_state["last_sim_time"] = now
+
+            if dt > 0 and sdr_state["is_receiving"]:
+                # Simulation: Recording
+                if sdr_state["recording_active"]:
+                    sdr_state["recording_seconds"] += dt
+                    sdr_state["recording_size_bytes"] += int(dt * sdr_state["sample_rate_hz"] * 4)
+                else:
+                    # Reset counters if not active
+                    sdr_state["recording_seconds"] = 0
+                    sdr_state["recording_size_bytes"] = 0
+                
+                # Simulation: Scanner
+                if sdr_state["scanner_active"]:
+                    new_freq = sdr_state["frequency_hz"] + sdr_state["scanner_step_hz"]
+                    if new_freq > sdr_state["scanner_max_freq"]:
+                        new_freq = sdr_state["scanner_min_freq"]
+                    sdr_state["frequency_hz"] = new_freq
+
+                    # If frequency is close to a known active channel, pause and lock
+                    active_channels = [137100000, 137620000, 137912500, 435880000, 437800000]
+                    for chan in active_channels:
+                        if abs(new_freq - chan) < 150000:
+                            sdr_state["frequency_hz"] = chan
+                            sdr_state["scanner_active"] = False
+                            print(f"[SCANNER] Found active signal at {chan/1e6:.3f} MHz. Auto-locking!")
+                            break
             
             # Inject dynamic decoding info & satdump pipeline
             status_payload = dict(sdr_state)
@@ -864,6 +911,21 @@ class SDRRequestHandler(BaseHTTPRequestHandler):
             if airspy_gain_vga is not None: sdr_state["airspy_gain_vga"] = int(airspy_gain_vga)
             if airspy_bias_tee is not None: sdr_state["airspy_bias_tee"] = bool(airspy_bias_tee)
             
+            # SDR# / SatDump new settings
+            bandwidth = params.get('bandwidth')
+            agc_mode = params.get('agc_mode')
+            agc_gain = params.get('agc_gain')
+            recording_active = params.get('recording_active')
+            scanner_active = params.get('scanner_active')
+            waterfall_scheme = params.get('waterfall_scheme')
+
+            if bandwidth is not None: sdr_state["bandwidth_hz"] = int(bandwidth)
+            if agc_mode is not None: sdr_state["agc_mode"] = str(agc_mode)
+            if agc_gain is not None: sdr_state["agc_gain"] = int(agc_gain)
+            if recording_active is not None: sdr_state["recording_active"] = bool(recording_active)
+            if scanner_active is not None: sdr_state["scanner_active"] = bool(scanner_active)
+            if waterfall_scheme is not None: sdr_state["waterfall_scheme"] = str(waterfall_scheme)
+
             if frequency is not None:
                 sdr_state["frequency_hz"] = int(frequency)
                 if active_sdr and sdr_state["device_type"] == "rtl-sdr":

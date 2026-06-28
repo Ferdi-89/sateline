@@ -27,13 +27,30 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
     airspy_bias_tee: false,
 
     // SatDump
-    satdump_pipeline: null
+    satdump_pipeline: null,
+
+    // SDR# / SatDump Enhancements
+    bandwidth_hz: 250000,
+    agc_mode: 'auto',
+    agc_gain: 32,
+    recording_active: false,
+    recording_seconds: 0,
+    recording_size_bytes: 0,
+    scanner_active: false,
+    waterfall_scheme: 'Classic'
   });
   
   const [sdrsharpActive, setSdrsharpActive] = useState(false);
   const [showTroubleshooting, setShowTroubleshooting] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [tuningFreq, setTuningFreq] = useState(435.880); // in MHz
+  
+  // SatDump image compositor and enhancements
+  const [satdumpChannel, setSatdumpChannel] = useState('ChA'); // 'ChA' | 'ChB' | 'RGB' | 'IR'
+  const [satdumpProjection, setSatdumpProjection] = useState('Raw'); // 'Raw' | 'Equirectangular' | 'Mercator'
+  const [imageBrightness, setImageBrightness] = useState(100);
+  const [imageContrast, setImageContrast] = useState(100);
+  const [imageGamma, setImageGamma] = useState(100);
   
   // Audio state
   const [volume, setVolume] = useState(60);
@@ -456,10 +473,13 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
     setSdrState(prev => ({ ...prev, [key]: val }));
     if (serverStatus === 'online') {
       try {
+        let payloadKey = key;
+        if (key === 'bandwidth_hz') payloadKey = 'bandwidth';
+        if (key === 'sample_rate_hz') payloadKey = 'sample_rate';
         await fetch(`${API_BASE}/api/tune`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ [key]: val })
+          body: JSON.stringify({ [payloadKey]: val })
         });
       } catch (err) {
         console.error('Failed to update setting:', err);
@@ -612,18 +632,47 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
         
         let r = 0, g = 0, b = 0;
         if (sdrState.is_receiving) {
-          if (normalized < 0.33) {
-            r = 3;
-            g = Math.round(normalized * 3 * 229);
-            b = Math.round(16 + normalized * 3 * 239);
-          } else if (normalized < 0.66) {
-            r = Math.round((normalized - 0.33) * 3 * 255);
-            g = 229;
-            b = Math.round(255 - (normalized - 0.33) * 3 * 255);
-          } else {
-            r = 255;
-            g = Math.round(229 - (normalized - 0.66) * 3 * 229);
-            b = 0;
+          const scheme = sdrState.waterfall_scheme || 'Classic';
+          if (scheme === 'Classic') {
+            if (normalized < 0.33) {
+              r = 3;
+              g = Math.round(normalized * 3 * 229);
+              b = Math.round(16 + normalized * 3 * 239);
+            } else if (normalized < 0.66) {
+              r = Math.round((normalized - 0.33) * 3 * 255);
+              g = 229;
+              b = Math.round(255 - (normalized - 0.33) * 3 * 255);
+            } else {
+              r = 255;
+              g = Math.round(229 - (normalized - 0.66) * 3 * 229);
+              b = 0;
+            }
+          } else if (scheme === 'Thermal') {
+            if (normalized < 0.33) {
+              r = Math.round(normalized * 3 * 255);
+              g = 0;
+              b = 0;
+            } else if (normalized < 0.66) {
+              r = 255;
+              g = Math.round((normalized - 0.33) * 3 * 165);
+              b = 0;
+            } else if (normalized < 0.9) {
+              r = 255;
+              g = 165 + Math.round((normalized - 0.66) * 4.16 * 90);
+              b = 0;
+            } else {
+              r = 255;
+              g = 255;
+              b = Math.round((normalized - 0.9) * 10 * 255);
+            }
+          } else if (scheme === 'Green Phosphor') {
+            r = Math.round(normalized * 0.1 * 255);
+            g = Math.round(normalized * 255);
+            b = Math.round(normalized * 0.15 * 255);
+          } else if (scheme === 'Blue Ice') {
+            r = Math.round(normalized * normalized * 255);
+            g = Math.round(normalized * 220);
+            b = Math.round(80 + normalized * 175);
           }
         } else {
           r = Math.round(3 + normalized * 10);
@@ -1087,25 +1136,90 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
     )
   );
 
-  const renderWaterfall = () => (
-    <div className="waterfall-canvas-container">
-      <div className="waterfall-hud-overlay">
-        <div className="hud-metric">
-          <span className="hud-lbl">Tuned</span>
-          <span className="hud-val font-numeric" style={{ color: '#00e5ff' }}>{formatFreq(sdrState.frequency_hz)}</span>
+  const getSValue = (dbm) => {
+    if (!dbm) return { text: 'S0', pct: 0 };
+    if (dbm <= -121) return { text: 'S0', pct: 0 };
+    if (dbm >= -73) {
+      const over = Math.max(0, dbm - (-73));
+      const pct = 70 + (over / 40) * 30;
+      return { text: `S9+${Math.round(over)}dB`, pct: Math.min(100, pct) };
+    }
+    const s = Math.round((dbm - (-121)) / 6);
+    return { text: `S${s}`, pct: (s / 9) * 70 };
+  };
+
+  const formatSize = (bytes) => {
+    if (bytes >= 1e6) return (bytes / 1e6).toFixed(1) + ' MB';
+    if (bytes >= 1e3) return (bytes / 1e3).toFixed(1) + ' KB';
+    return bytes + ' B';
+  };
+
+  const formatDuration = (sec) => {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const renderWaterfall = () => {
+    const rssi = sdrState.decoding_info?.signal_strength_dbm || -110;
+    const sVal = getSValue(rssi);
+
+    return (
+      <div className="waterfall-canvas-container">
+        <div className="waterfall-hud-overlay">
+          <div className="hud-metric">
+            <span className="hud-lbl">Tuned</span>
+            <span className="hud-val font-numeric" style={{ color: '#00e5ff' }}>{formatFreq(sdrState.frequency_hz)}</span>
+          </div>
+          <div className="hud-metric">
+            <span className="hud-lbl">Sample Rate</span>
+            <span className="hud-val font-numeric">{(sdrState.sample_rate_hz / 1e6).toFixed(3)} MSPS</span>
+          </div>
+          <div className="hud-metric">
+            <span className="hud-lbl">Filter BW</span>
+            <span className="hud-val font-numeric" style={{ color: '#ff6d00' }}>{(sdrState.bandwidth_hz / 1e3).toFixed(1)} kHz</span>
+          </div>
+          <div className="hud-metric">
+            <span className="hud-lbl">Mode</span>
+            <span className="hud-val font-numeric" style={{ color: '#ffea00' }}>{sdrState.mode}</span>
+          </div>
         </div>
-        <div className="hud-metric">
-          <span className="hud-lbl">Sample Rate</span>
-          <span className="hud-val font-numeric">{(sdrState.sample_rate_hz / 1e6).toFixed(3)} MSPS</span>
+
+        {/* S-Meter Bar Overlaid on top of waterfall */}
+        <div className="sdr-smeter-container">
+          <span className="sdr-smeter-lbl font-numeric">{sVal.text}</span>
+          <div className="sdr-smeter-bar-bg">
+            <div className="sdr-smeter-bar-fill" style={{ width: `${sVal.pct}%` }} />
+            {/* S-Meter calibration markings */}
+            <div className="sdr-smeter-ticks">
+              {[1, 3, 5, 7, 9].map(tick => (
+                <span key={tick} style={{ left: `${(tick / 9) * 70}%` }}>{tick}</span>
+              ))}
+              <span style={{ left: '85%' }}>+20</span>
+              <span style={{ left: '96%' }}>+40</span>
+            </div>
+          </div>
+          <span className="sdr-smeter-dbm font-numeric">{rssi} dBm</span>
         </div>
-        <div className="hud-metric">
-          <span className="hud-lbl">Mode</span>
-          <span className="hud-val font-numeric" style={{ color: '#ffea00' }}>{sdrState.mode}</span>
-        </div>
+
+        {/* Recording / Scanning Status Indicators */}
+        {sdrState.recording_active && (
+          <div className="sdr-recording-badge">
+            <span className="sdr-rec-dot"></span>
+            <span className="font-numeric">REC {formatDuration(sdrState.recording_seconds)} ({formatSize(sdrState.recording_size_bytes)})</span>
+          </div>
+        )}
+
+        {sdrState.scanner_active && (
+          <div className="sdr-scanning-badge">
+            <span className="sdr-scan-text">SCANNING BAND...</span>
+          </div>
+        )}
+
+        <canvas ref={canvasRef} width={wfWidth} height={wfHeight} className={`sdr-waterfall-canvas ${isFullscreen ? 'fullscreen' : ''}`} />
       </div>
-      <canvas ref={canvasRef} width={wfWidth} height={wfHeight} className={`sdr-waterfall-canvas ${isFullscreen ? 'fullscreen' : ''}`} />
-    </div>
-  );
+    );
+  };
 
   // Dynamic decoder display standard standard standard
   const renderDecoderHud = () => {
@@ -1113,22 +1227,8 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
 
     if (decoderTab === 'satdump') {
       const pipeline = sdrState.satdump_pipeline;
-      if (!pipeline || !pipeline.active) {
-        return (
-          <div className="sdr-decoder-hud">
-            <div className="decoder-hud-title">
-              <div className="sdr-tab-group">
-                <button className="decoder-tab-btn" onClick={() => setDecoderTab('standard')}>STANDARD</button>
-                <button className="decoder-tab-btn active" onClick={() => setDecoderTab('satdump')}>SATDUMP</button>
-              </div>
-              <span className="decoder-hud-badge">SATDUMP PIPELINE</span>
-            </div>
-            <div className="decoder-hud-body" style={{ justifyContent: 'center', padding: '12px' }}>
-              <span style={{ color: '#5a7a9a', fontSize: '0.6rem' }}>Pipeline Inactive. Silakan START RX spektrum terlebih dahulu.</span>
-            </div>
-          </div>
-        );
-      }
+      const isNoaa = pipeline.pipeline_name.includes("NOAA");
+      const isMeteor = pipeline.pipeline_name.includes("Meteor");
 
       return (
         <div className="sdr-decoder-hud">
@@ -1140,7 +1240,7 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
             <span className="decoder-hud-badge">SATDUMP LIVE</span>
           </div>
 
-          <div className="decoder-hud-body">
+          <div className="decoder-hud-body satdump-enhanced-body">
             <div className="decoder-hud-details">
               <div className="decoder-metric-row">
                 <span className="decoder-metric-lbl">Pipeline Name</span>
@@ -1151,34 +1251,57 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
                 <span className="decoder-metric-val font-numeric">{pipeline.demodulator}</span>
               </div>
               <div className="decoder-metric-row">
-                <span className="decoder-metric-lbl">Decimation</span>
-                <span className="decoder-metric-val font-numeric">/{pipeline.decimation}</span>
-              </div>
-              <div className="decoder-metric-row">
-                <span className="decoder-metric-lbl">Symbol Rate</span>
-                <span className="decoder-metric-val font-numeric">{pipeline.symbol_rate.toLocaleString()} S/s</span>
-              </div>
-              <div className="decoder-metric-row">
                 <span className="decoder-metric-lbl">Viterbi BER</span>
                 <span className={`decoder-metric-val font-numeric ${pipeline.viterbi_ber < 0.01 ? 'green' : 'yellow'}`}>
                   {pipeline.viterbi_ber.toExponential(4)}
                 </span>
               </div>
               <div className="decoder-metric-row">
-                <span className="decoder-metric-lbl">Reed-Solomon Cor</span>
-                <span className="decoder-metric-val font-numeric green">
-                  {pipeline.rs_corrected[0]} / {pipeline.rs_corrected[1]}
-                </span>
-              </div>
-              <div className="decoder-metric-row">
-                <span className="decoder-metric-lbl">Frames Decoded</span>
-                <span className="decoder-metric-val font-numeric">{pipeline.frames_decoded.toLocaleString()}</span>
-              </div>
-              <div className="decoder-metric-row">
                 <span className="decoder-metric-lbl">Sync Tracking</span>
                 <span className={`decoder-metric-val ${pipeline.sync_locked ? 'green' : 'err'}`}>
                   {pipeline.sync_locked ? 'SYNC LOCKED' : 'SEARCHING SYNC'}
                 </span>
+              </div>
+
+              {/* Multi-channel selector */}
+              {(isNoaa || isMeteor) && (
+                <div className="satdump-ch-selector-row">
+                  <span className="decoder-metric-lbl">Active Channel</span>
+                  <div className="satdump-ch-buttons">
+                    {isNoaa && ['ChA', 'ChB'].map(ch => (
+                      <button
+                        key={ch}
+                        className={`satdump-ch-btn ${satdumpChannel === ch ? 'active' : ''}`}
+                        onClick={() => setSatdumpChannel(ch)}
+                      >
+                        {ch === 'ChA' ? 'Channel A (Vis/IR)' : 'Channel B (IR)'}
+                      </button>
+                    ))}
+                    {isMeteor && ['RGB', 'IR'].map(ch => (
+                      <button
+                        key={ch}
+                        className={`satdump-ch-btn ${satdumpChannel === ch ? 'active' : ''}`}
+                        onClick={() => setSatdumpChannel(ch)}
+                      >
+                        {ch === 'RGB' ? 'RGB False Color' : 'Thermal IR'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Map Projection selection */}
+              <div className="satdump-projection-row">
+                <span className="decoder-metric-lbl">Map Projection</span>
+                <select
+                  value={satdumpProjection}
+                  onChange={(e) => setSatdumpProjection(e.target.value)}
+                  className="satdump-projection-select"
+                >
+                  <option value="Raw">Raw Satellite swath (Unprojected)</option>
+                  <option value="Equirectangular">Equirectangular cylindrical</option>
+                  <option value="Mercator">Mercator projection mapping</option>
+                </select>
               </div>
 
               {/* Progress Bar for Image Decode */}
@@ -1193,17 +1316,65 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
                   </div>
                 </div>
               )}
+
+              {/* Frame Sync Status Bar */}
+              <div className="satdump-sync-quality-container">
+                <span className="decoder-metric-lbl">Frame Quality Sync</span>
+                <div className="satdump-sync-blocks">
+                  {Array.from({ length: 8 }).map((_, idx) => {
+                    const active = pipeline.sync_locked && (idx < 6 || Math.random() > 0.15);
+                    return (
+                      <div
+                        key={idx}
+                        className={`satdump-sync-block ${active ? 'active' : 'inactive'}`}
+                        title={active ? 'Frame decoded correctly' : 'Frame dropped / corrupted'}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
-            <div className="decoder-hud-visuals">
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                <canvas ref={constellationCanvasRef} width={constSize} height={constSize} className={`sdr-constellation-canvas ${isFullscreen ? 'fullscreen' : ''}`} />
-                <span style={{ fontSize: '0.45rem', color: '#5a7a9a', fontWeight: 'bold' }}>CONSTELLATION IQ</span>
+            {/* Image Enhancements & Canvas View */}
+            <div className="decoder-hud-visuals satdump-enhanced-visuals">
+              <div className="satdump-enhancements-sliders">
+                <div className="satdump-slider-item">
+                  <span>BRIGHTNESS: {imageBrightness}%</span>
+                  <input
+                    type="range" min="50" max="150" value={imageBrightness}
+                    onChange={(e) => setImageBrightness(parseInt(e.target.value))}
+                  />
+                </div>
+                <div className="satdump-slider-item">
+                  <span>CONTRAST: {imageContrast}%</span>
+                  <input
+                    type="range" min="50" max="150" value={imageContrast}
+                    onChange={(e) => setImageContrast(parseInt(e.target.value))}
+                  />
+                </div>
+                <div className="satdump-slider-item">
+                  <span>GAMMA: {(imageGamma / 100).toFixed(1)}</span>
+                  <input
+                    type="range" min="50" max="150" value={imageGamma}
+                    onChange={(e) => setImageGamma(parseInt(e.target.value))}
+                  />
+                </div>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                <canvas ref={videoCanvasRef} width={vidWidth} height={vidHeight} className={`sdr-video-canvas ${isFullscreen ? 'fullscreen' : ''}`} />
-                <span style={{ fontSize: '0.45rem', color: '#5a7a9a', fontWeight: 'bold' }}>IMAGE/DATA PIPELINE</span>
+              <div className="satdump-canvases-row">
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                  <canvas ref={constellationCanvasRef} width={constSize} height={constSize} className={`sdr-constellation-canvas ${isFullscreen ? 'fullscreen' : ''}`} />
+                  <span style={{ fontSize: '0.45rem', color: '#5a7a9a', fontWeight: 'bold' }}>CONSTELLATION IQ</span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                  <div className="satdump-image-viewer-wrapper" style={{
+                    filter: `brightness(${imageBrightness}%) contrast(${imageContrast}%) saturate(${imageGamma}%)`
+                  }}>
+                    <canvas ref={videoCanvasRef} width={vidWidth} height={vidHeight} className={`sdr-video-canvas ${isFullscreen ? 'fullscreen' : ''}`} />
+                  </div>
+                  <span style={{ fontSize: '0.45rem', color: '#5a7a9a', fontWeight: 'bold' }}>IMAGE/DATA PIPELINE</span>
+                </div>
               </div>
             </div>
           </div>
@@ -1377,35 +1548,54 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
         </button>
 
         {sdrState.is_receiving && (
-          <div className="sdr-audio-controls">
-            <button 
-              className={`sdr-mute-btn ${isMuted ? 'muted' : ''}`}
-              onClick={() => {
-                setIsMuted(!isMuted);
-                if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
-                  audioCtxRef.current.resume().catch(() => {});
-                }
-              }}
-              title={isMuted ? "Unmute Audio" : "Mute Audio"}
+          <>
+            <button
+              className={`sdr-rec-btn ${sdrState.recording_active ? 'recording' : ''}`}
+              onClick={() => updateSetting('recording_active', !sdrState.recording_active)}
+              title={sdrState.recording_active ? "Stop Recording IQ Data" : "Start Recording IQ Data (SDR# Sim)"}
             >
-              {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+              <span className="rec-indicator-circle"></span>
+              <span>{sdrState.recording_active ? 'STOP REC' : 'RECORD'}</span>
             </button>
-            <input 
-              type="range"
-              min="0"
-              max="100"
-              value={volume}
-              onChange={(e) => {
-                setVolume(parseInt(e.target.value));
-                if (isMuted) setIsMuted(false);
-                if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
-                  audioCtxRef.current.resume().catch(() => {});
-                }
-              }}
-              className="sdr-volume-slider"
-              title={`Volume: ${volume}%`}
-            />
-          </div>
+
+            <button
+              className={`sdr-scan-btn ${sdrState.scanner_active ? 'scanning' : ''}`}
+              onClick={() => updateSetting('scanner_active', !sdrState.scanner_active)}
+              title={sdrState.scanner_active ? "Stop Auto Frequency Scanner" : "Start Auto Frequency Scanner (SDR# Sim)"}
+            >
+              <span>{sdrState.scanner_active ? 'STOP SCAN' : 'SCAN'}</span>
+            </button>
+
+            <div className="sdr-audio-controls">
+              <button 
+                className={`sdr-mute-btn ${isMuted ? 'muted' : ''}`}
+                onClick={() => {
+                  setIsMuted(!isMuted);
+                  if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+                    audioCtxRef.current.resume().catch(() => {});
+                  }
+                }}
+                title={isMuted ? "Unmute Audio" : "Mute Audio"}
+              >
+                {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+              </button>
+              <input 
+                type="range"
+                min="0"
+                max="100"
+                value={volume}
+                onChange={(e) => {
+                  setVolume(parseInt(e.target.value));
+                  if (isMuted) setIsMuted(false);
+                  if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+                    audioCtxRef.current.resume().catch(() => {});
+                  }
+                }}
+                className="sdr-volume-slider"
+                title={`Volume: ${volume}%`}
+              />
+            </div>
+          </>
         )}
 
         <div className="freq-nudge-group">
@@ -1445,13 +1635,56 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
           <div className="setting-control-row">
             <span className="setting-label">Mode Demodulasi</span>
             <div className="setting-btn-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-              {['FM', 'AM', 'USB', 'LSB', 'DAB', 'DVB-T'].map(m => (
+              {['FM', 'AM', 'USB', 'LSB', 'DAB', 'DVB-T', 'CW', 'WFM', 'RAW'].map(m => (
                 <button 
                   key={m} 
                   className={`setting-btn ${sdrState.mode === m ? 'active' : ''}`}
                   onClick={() => updateSetting('mode', m)}
                 >
                   {m}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Bandwidth selector */}
+          <div className="setting-control-row">
+            <span className="setting-label">Bandwidth Filter</span>
+            <div className="setting-btn-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+              {[
+                { label: '500 Hz (CW)', val: 500 },
+                { label: '3 kHz (SSB)', val: 3000 },
+                { label: '6 kHz (AM)', val: 6000 },
+                { label: '12 kHz (NFM)', val: 12000 },
+                { label: '25 kHz (NFM)', val: 25000 },
+                { label: '150 kHz (WFM)', val: 150000 },
+                { label: '250 kHz (WFM)', val: 250000 }
+              ].map(b => (
+                <button
+                  key={b.val}
+                  className={`setting-btn ${sdrState.bandwidth_hz === b.val ? 'active' : ''}`}
+                  onClick={() => updateSetting('bandwidth_hz', b.val)}
+                  title={b.label}
+                  style={{ fontSize: '0.45rem', padding: '3px 1px' }}
+                >
+                  {b.val >= 1000 ? `${b.val/1000} kHz` : `${b.val} Hz`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Waterfall Color Scheme selection */}
+          <div className="setting-control-row">
+            <span className="setting-label">Waterfall Theme</span>
+            <div className="setting-btn-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+              {['Classic', 'Thermal', 'Green Phosphor', 'Blue Ice'].map(scheme => (
+                <button
+                  key={scheme}
+                  className={`setting-btn ${sdrState.waterfall_scheme === scheme ? 'active' : ''}`}
+                  onClick={() => updateSetting('waterfall_scheme', scheme)}
+                  style={{ fontSize: '0.48rem' }}
+                >
+                  {scheme}
                 </button>
               ))}
             </div>
@@ -1466,7 +1699,7 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
                   <button 
                     key={sr} 
                     className={`setting-btn ${sdrState.sample_rate_hz === sr ? 'active' : ''}`}
-                    onClick={() => updateSetting('sample_rate', sr)}
+                    onClick={() => updateSetting('sample_rate_hz', sr)}
                   >
                     {(sr / 1e6).toFixed(1)} MSPS
                   </button>
@@ -1481,7 +1714,7 @@ export default function SdrController({ satellite: sat, simTime, isFullscreen, s
                   <button 
                     key={sr} 
                     className={`setting-btn ${sdrState.sample_rate_hz === sr ? 'active' : ''}`}
-                    onClick={() => updateSetting('sample_rate', sr)}
+                    onClick={() => updateSetting('sample_rate_hz', sr)}
                   >
                     {(sr / 1e6).toFixed(3)} MSPS
                   </button>

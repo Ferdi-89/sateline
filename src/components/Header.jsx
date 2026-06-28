@@ -1,5 +1,5 @@
 
-import { Globe, Map, Search, Compass, Radio } from 'lucide-react';
+import { Globe, Map, Search, Compass, Radio, TrendingUp, Target, List } from 'lucide-react';
 
 function Header({ 
   totalCount, 
@@ -13,6 +13,12 @@ function Header({
   setShowObserverPanel,
   showSdrPanel,
   setShowSdrPanel,
+  showDopplerPanel,
+  setShowDopplerPanel,
+  showRotorPanel,
+  setShowRotorPanel,
+  showPassTable,
+  setShowPassTable,
 }) {
   const utc = simTime ? simTime.toISOString().slice(11, 19) + ' UTC' : 'N/A';
 
@@ -70,6 +76,36 @@ function Header({
             <span className="btn-label">SDR</span>
           </button>
 
+          {/* Doppler toggle button */}
+          <button
+            className={`view-toggle-btn ${showDopplerPanel ? 'active-3d' : ''}`}
+            onClick={() => setShowDopplerPanel(!showDopplerPanel)}
+            title="Toggle Doppler Shift Calculator"
+          >
+            <TrendingUp size={14} />
+            <span className="btn-label">Doppler</span>
+          </button>
+
+          {/* Rotor toggle button */}
+          <button
+            className={`view-toggle-btn ${showRotorPanel ? 'active-3d' : ''}`}
+            onClick={() => setShowRotorPanel(!showRotorPanel)}
+            title="Toggle Antenna Rotor Simulator"
+          >
+            <Target size={14} />
+            <span className="btn-label">Rotor</span>
+          </button>
+
+          {/* Multi-Pass table toggle */}
+          <button
+            className={`view-toggle-btn ${showPassTable ? 'active-3d' : ''}`}
+            onClick={() => setShowPassTable(!showPassTable)}
+            title="Toggle Multi-Satellite Pass Table"
+          >
+            <List size={14} />
+            <span className="btn-label">Passes</span>
+          </button>
+
           {/* Observer toggle button (visible on mobile, hides/shows observer dashboard) */}
           <button
             className={`view-toggle-btn mobile-only-btn ${showObserverPanel ? 'active-3d' : ''}`}
@@ -103,3 +139,4 @@ function Header({
 }
 
 export default Header;
+

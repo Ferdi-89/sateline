@@ -1,8 +1,9 @@
 import React from 'react';
-import { Search, Radio, Orbit } from 'lucide-react';
+import { Search, Radio, Orbit, Star, ArrowUpDown } from 'lucide-react';
 
 const CATEGORIES = [
   { id: 'all', label: 'ALL SATS' },
+  { id: 'favorites', label: 'FAVORITES ⭐' },
   { id: 'station', label: 'SPACE STATIONS' },
   { id: 'starlink', label: 'STARLINK' },
   { id: 'gps', label: 'GPS OPS' },
@@ -12,6 +13,7 @@ const CATEGORIES = [
 
 const CATEGORY_COLORS = {
   all:      '#e0e6ed',
+  favorites: '#ffc832',
   station:  '#00e5ff',
   gps:      '#00c853',
   weather:  '#ff6d00',
@@ -29,12 +31,18 @@ function Sidebar({
   selectedSatellite, 
   onSelectSatellite,
   isOpen = true,
+  favorites = [],
+  setFavorites,
+  sortBy = 'name',
+  setSortBy,
 }) {
   // Compute counts per category from allSatellites
   const counts = {};
   counts.all = allSatellites.length;
+  counts.favorites = favorites.length;
+  
   CATEGORIES.forEach(c => {
-    if (c.id !== 'all') {
+    if (c.id !== 'all' && c.id !== 'favorites') {
       counts[c.id] = allSatellites.filter(s => s.category === c.id).length;
     }
   });
@@ -54,6 +62,15 @@ function Sidebar({
       return tle1.substring(2, 7).trim();
     } catch {
       return '—';
+    }
+  };
+
+  const toggleFavorite = (e, satName) => {
+    e.stopPropagation();
+    if (favorites.includes(satName)) {
+      setFavorites(favorites.filter(name => name !== satName));
+    } else {
+      setFavorites([...favorites, satName]);
     }
   };
 
@@ -90,6 +107,28 @@ function Sidebar({
         )}
       </div>
 
+      {/* Sidebar Sorting Toolbar */}
+      <div className="sidebar-sort-bar">
+        <span className="sort-label">
+          <ArrowUpDown size={10} style={{ marginRight: '4px' }} />
+          SORT BY
+        </span>
+        <div className="sort-buttons">
+          <button
+            className={`sort-btn ${sortBy === 'name' ? 'active' : ''}`}
+            onClick={() => setSortBy('name')}
+          >
+            NAME
+          </button>
+          <button
+            className={`sort-btn ${sortBy === 'norad' ? 'active' : ''}`}
+            onClick={() => setSortBy('norad')}
+          >
+            NORAD ID
+          </button>
+        </div>
+      </div>
+
       {/* Category Grid */}
       <div className="categories">
         {CATEGORIES.map(c => (
@@ -103,8 +142,6 @@ function Sidebar({
           </button>
         ))}
       </div>
-
-      {/* Observer Location Panel has been moved to floating map widget (ObserverPanel) */}
 
       {/* Satellite List Header */}
       <div className="satellite-list-header">
@@ -123,6 +160,7 @@ function Sidebar({
             const isSel = selectedSatellite && 
                           selectedSatellite.name === sat.name && 
                           selectedSatellite.tle1 === sat.tle1;
+            const isFav = favorites.includes(sat.name);
             const color = CATEGORY_COLORS[sat.category] || CATEGORY_COLORS.other;
 
             return (
@@ -133,7 +171,16 @@ function Sidebar({
                 onClick={() => onSelectSatellite(sat)}
               >
                 <div className="sat-info">
-                  <span className="sat-name" title={sat.name}>{sat.name}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <button
+                      className={`sat-fav-star-btn ${isFav ? 'fav' : ''}`}
+                      onClick={(e) => toggleFavorite(e, sat.name)}
+                      title={isFav ? "Remove from Favorites" : "Add to Favorites"}
+                    >
+                      <Star size={11} fill={isFav ? "#ffc832" : "none"} />
+                    </button>
+                    <span className="sat-name" title={sat.name}>{sat.name}</span>
+                  </div>
                   <div className="sat-meta">
                     <span className="sat-id font-numeric">NORAD #{getNoradId(sat.tle1)}</span>
                     {isSel && (

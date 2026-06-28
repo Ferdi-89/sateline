@@ -3084,3 +3084,949 @@ canvas.map-area {
   color: #00e5ff;
   border: 1px solid rgba(0, 229, 255, 0.2);
 }
+
+/* ============================================================
+   DOPPLER PANEL
+   ============================================================ */
+
+.doppler-panel-floating {
+  position: absolute;
+  bottom: 60px;
+  left: 350px;
+  z-index: 35;
+  width: 320px;
+  transition: left 0.3s ease;
+}
+.doppler-panel-floating.shifted { left: 390px; }
+.doppler-panel-floating.sidebar-collapsed { left: 12px; }
+
+.doppler-panel {
+  background: rgba(5, 14, 26, 0.92);
+  border: 1px solid rgba(0, 229, 255, 0.12);
+  border-radius: 6px;
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+}
+
+.doppler-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(0, 229, 255, 0.04);
+  border-bottom: 1px solid rgba(0, 229, 255, 0.08);
+  cursor: pointer;
+}
+
+.doppler-title {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #8fa0b5;
+  letter-spacing: 0.8px;
+}
+
+.doppler-icon-pulse {
+  color: #00e5ff;
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.doppler-live-badge {
+  font-size: 0.55rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Space Mono', monospace;
+}
+.doppler-live-badge.positive { color: #00c853; background: rgba(0, 200, 83, 0.1); }
+.doppler-live-badge.negative { color: #ff3d00; background: rgba(255, 61, 0, 0.1); }
+
+.doppler-body {
+  padding: 10px 12px;
+}
+
+.doppler-freq-input-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.doppler-input-label {
+  font-size: 0.5rem;
+  color: #5a7a9a;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.doppler-freq-input-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.doppler-freq-input {
+  width: 100px;
+  background: rgba(10, 22, 40, 0.8);
+  border: 1px solid rgba(0, 229, 255, 0.15);
+  color: #00e5ff;
+  padding: 3px 6px;
+  font-size: 0.6rem;
+  border-radius: 3px;
+  text-align: right;
+}
+
+.doppler-freq-unit {
+  font-size: 0.5rem;
+  color: #5a7a9a;
+  font-weight: 700;
+}
+
+.doppler-metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.doppler-metric-box {
+  background: rgba(10, 22, 40, 0.5);
+  border: 1px solid rgba(90, 122, 154, 0.1);
+  border-radius: 4px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.doppler-metric-label {
+  font-size: 0.42rem;
+  color: #5a7a9a;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.doppler-metric-value {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #e0e6ed;
+}
+.doppler-metric-value.positive { color: #00c853; }
+.doppler-metric-value.negative { color: #ff3d00; }
+
+.doppler-metric-unit {
+  font-size: 0.42rem;
+  color: #5a7a9a;
+}
+
+.doppler-graph-container {
+  border: 1px solid rgba(90, 122, 154, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.doppler-graph-label {
+  display: block;
+  font-size: 0.42rem;
+  color: #5a7a9a;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 4px 6px 2px;
+  background: rgba(10, 22, 40, 0.5);
+}
+
+.doppler-graph-canvas {
+  display: block;
+  width: 100%;
+  height: 80px;
+}
+
+.doppler-no-data {
+  font-size: 0.55rem;
+  color: #5a7a9a;
+  text-align: center;
+  padding: 15px;
+}
+
+/* ============================================================
+   ROTOR SIMULATOR
+   ============================================================ */
+
+.rotor-panel-floating {
+  position: absolute;
+  bottom: 60px;
+  left: 350px;
+  z-index: 34;
+  width: 300px;
+  transition: left 0.3s ease;
+}
+.rotor-panel-floating.shifted { left: 390px; }
+.rotor-panel-floating.sidebar-collapsed { left: 12px; }
+
+.rotor-panel {
+  background: rgba(5, 14, 26, 0.92);
+  border: 1px solid rgba(0, 229, 255, 0.12);
+  border-radius: 6px;
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+}
+
+.rotor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(0, 229, 255, 0.04);
+  border-bottom: 1px solid rgba(0, 229, 255, 0.08);
+}
+
+.rotor-title {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #8fa0b5;
+  letter-spacing: 0.8px;
+}
+
+.rotor-icon-pulse {
+  color: #00e5ff;
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+.rotor-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.48rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 8px;
+  letter-spacing: 0.5px;
+}
+.rotor-status-badge.tracking {
+  color: #00c853;
+  background: rgba(0, 200, 83, 0.1);
+  border: 1px solid rgba(0, 200, 83, 0.2);
+}
+.rotor-status-badge.idle {
+  color: #5a7a9a;
+  background: rgba(90, 122, 154, 0.1);
+  border: 1px solid rgba(90, 122, 154, 0.15);
+}
+.rotor-status-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulseGlow 1.5s ease-in-out infinite;
+}
+
+.rotor-body { padding: 10px 12px; }
+
+.rotor-gauges {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.rotor-gauge-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.rotor-gauge-label {
+  font-size: 0.42rem;
+  color: #5a7a9a;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.rotor-gauge-value {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #e0e6ed;
+}
+.rotor-gauge-value.visible { color: #00c853; }
+.rotor-gauge-value.below { color: #ff3d00; }
+
+.rotor-compass-svg {
+  width: 120px;
+  height: 120px;
+}
+
+.rotor-compass-bg { fill: rgba(10, 22, 40, 0.6); }
+.rotor-compass-ring { fill: none; stroke: rgba(90, 122, 154, 0.2); stroke-width: 1; }
+.rotor-compass-ring-inner { fill: none; stroke: rgba(90, 122, 154, 0.1); stroke-width: 0.5; }
+.rotor-tick-major { stroke: rgba(0, 229, 255, 0.4); stroke-width: 1.5; }
+.rotor-tick-minor { stroke: rgba(90, 122, 154, 0.2); stroke-width: 0.5; }
+
+.rotor-cardinal {
+  fill: #5a7a9a;
+  font-size: 8px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  font-family: 'Space Mono', monospace;
+}
+
+.rotor-needle {
+  stroke-width: 2;
+  stroke-linecap: round;
+  transition: all 0.3s ease;
+}
+.rotor-needle.active { stroke: #00e5ff; }
+.rotor-needle.inactive { stroke: #5a7a9a; }
+
+.rotor-center-dot { fill: #ffffff; }
+
+.rotor-target-dot {
+  transition: all 0.3s ease;
+}
+.rotor-target-dot.active { fill: #00e5ff; filter: drop-shadow(0 0 4px #00e5ff); }
+.rotor-target-dot.inactive { fill: #5a7a9a; }
+
+/* Elevation bar gauge */
+.rotor-elevation-gauge {
+  width: 40px;
+  height: 120px;
+  position: relative;
+  display: flex;
+  gap: 4px;
+}
+
+.rotor-el-bar-bg {
+  width: 16px;
+  height: 100%;
+  background: rgba(10, 22, 40, 0.6);
+  border: 1px solid rgba(90, 122, 154, 0.2);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+
+.rotor-el-bar-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  border-radius: 0 0 3px 3px;
+  transition: height 0.3s ease;
+}
+.rotor-el-bar-fill.active {
+  background: linear-gradient(to top, #00c853, #00e5ff);
+  box-shadow: 0 0 6px rgba(0, 229, 255, 0.3);
+}
+.rotor-el-bar-fill.inactive {
+  background: rgba(90, 122, 154, 0.3);
+}
+
+.rotor-el-tick {
+  position: absolute;
+  left: 18px;
+  display: flex;
+  align-items: center;
+}
+.rotor-el-tick-label {
+  font-size: 6px;
+  color: #5a7a9a;
+}
+
+.rotor-el-pointer {
+  position: absolute;
+  left: 18px;
+  transform: translateY(50%);
+  transition: bottom 0.3s ease;
+}
+.rotor-el-pointer-value {
+  font-size: 0.5rem;
+  color: #00e5ff;
+  font-weight: 700;
+  background: rgba(0, 229, 255, 0.1);
+  padding: 1px 4px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 229, 255, 0.2);
+}
+
+.rotor-status-bar {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  background: rgba(10, 22, 40, 0.4);
+  border-radius: 4px;
+  border: 1px solid rgba(90, 122, 154, 0.08);
+}
+
+.rotor-status-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rotor-status-lbl {
+  font-size: 0.4rem;
+  color: #5a7a9a;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.rotor-status-val {
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: #e0e6ed;
+}
+.rotor-status-val.tracking { color: #00c853; }
+.rotor-status-val.stow { color: #5a7a9a; }
+
+/* ============================================================
+   MULTI-PASS TABLE
+   ============================================================ */
+
+.multipass-panel-floating {
+  position: absolute;
+  bottom: 60px;
+  left: 12px;
+  right: 320px;
+  z-index: 33;
+  transition: right 0.3s ease;
+}
+.multipass-panel-floating.sidebar-collapsed { right: 12px; }
+
+.multipass-panel {
+  background: rgba(5, 14, 26, 0.95);
+  border: 1px solid rgba(0, 229, 255, 0.12);
+  border-radius: 6px;
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+  max-height: 380px;
+  display: flex;
+  flex-direction: column;
+}
+
+.multipass-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(0, 229, 255, 0.04);
+  border-bottom: 1px solid rgba(0, 229, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.multipass-title {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #8fa0b5;
+  letter-spacing: 0.8px;
+}
+
+.multipass-count-badge {
+  font-size: 0.5rem;
+  font-weight: 700;
+  color: #00e5ff;
+  background: rgba(0, 229, 255, 0.1);
+  padding: 1px 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 229, 255, 0.15);
+}
+
+.multipass-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  background: rgba(10, 22, 40, 0.3);
+  border-bottom: 1px solid rgba(90, 122, 154, 0.08);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.multipass-filter-group, .multipass-sort-group {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.multipass-filter-btn, .multipass-sort-btn {
+  background: transparent;
+  border: 1px solid rgba(90, 122, 154, 0.15);
+  color: #5a7a9a;
+  font-size: 0.45rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'Space Mono', monospace;
+  letter-spacing: 0.3px;
+}
+.multipass-filter-btn:hover, .multipass-sort-btn:hover { color: #e0e6ed; }
+.multipass-filter-btn.active, .multipass-sort-btn.active {
+  background: rgba(0, 229, 255, 0.12);
+  color: #00e5ff;
+  border-color: rgba(0, 229, 255, 0.25);
+}
+
+.multipass-table-wrapper {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.multipass-table-wrapper::-webkit-scrollbar { width: 4px; }
+.multipass-table-wrapper::-webkit-scrollbar-thumb { background: rgba(0, 229, 255, 0.15); border-radius: 2px; }
+
+.multipass-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.52rem;
+}
+
+.multipass-table th {
+  background: rgba(10, 22, 40, 0.5);
+  color: #5a7a9a;
+  font-weight: 700;
+  font-size: 0.42rem;
+  letter-spacing: 0.5px;
+  padding: 5px 8px;
+  text-align: left;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom: 1px solid rgba(90, 122, 154, 0.1);
+}
+
+.multipass-table td {
+  padding: 4px 8px;
+  color: #8fa0b5;
+  border-bottom: 1px solid rgba(90, 122, 154, 0.05);
+}
+
+.multipass-table tr:hover td { background: rgba(0, 229, 255, 0.03); }
+
+.pass-active-row td {
+  background: rgba(0, 200, 83, 0.08) !important;
+  color: #00c853 !important;
+}
+
+.multipass-sat-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 160px;
+}
+
+.multipass-cat-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.multipass-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: #e0e6ed;
+}
+
+.multipass-no-data {
+  font-size: 0.55rem;
+  color: #5a7a9a;
+  text-align: center;
+  padding: 20px;
+}
+
+/* ============================================================
+   RESPONSIVE: Floating panel adjustments for mobile
+   ============================================================ */
+
+@media (max-width: 768px) {
+  .doppler-panel-floating,
+  .rotor-panel-floating {
+    left: 8px !important;
+    right: 8px;
+    width: auto;
+    bottom: 50px;
+  }
+  .multipass-panel-floating {
+    left: 8px;
+    right: 8px !important;
+    bottom: 50px;
+    max-height: 260px;
+  }
+}
+
+/* ============================================================
+   SDR# ENHANCED: S-METER & CONTROL BUTTONS
+   ============================================================ */
+
+.sdr-smeter-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: rgba(10, 22, 40, 0.6);
+  border-bottom: 1px solid rgba(0, 229, 255, 0.1);
+  font-size: 0.5rem;
+}
+
+.sdr-smeter-lbl {
+  color: #ffea00;
+  font-weight: bold;
+  width: 45px;
+}
+
+.sdr-smeter-bar-bg {
+  flex: 1;
+  height: 6px;
+  background: rgba(90, 122, 154, 0.15);
+  border-radius: 3px;
+  position: relative;
+}
+
+.sdr-smeter-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(to right, #00c853 70%, #ffea00 85%, #ff3d00 100%);
+  box-shadow: 0 0 4px rgba(0, 229, 255, 0.4);
+  transition: width 0.1s ease;
+}
+
+.sdr-smeter-ticks {
+  position: absolute;
+  top: 8px;
+  left: 0;
+  right: 0;
+  display: flex;
+  font-size: 5px;
+  color: #5a7a9a;
+}
+.sdr-smeter-ticks span {
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.sdr-smeter-dbm {
+  color: #8fa0b5;
+  width: 50px;
+  text-align: right;
+}
+
+/* Recording badge */
+.sdr-recording-badge {
+  position: absolute;
+  top: 35px;
+  left: 10px;
+  background: rgba(255, 61, 0, 0.85);
+  color: white;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.5rem;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  z-index: 10;
+  box-shadow: 0 0 6px rgba(255, 61, 0, 0.4);
+}
+
+.sdr-rec-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffffff;
+  animation: blinkRed 1s infinite alternate;
+}
+
+@keyframes blinkRed {
+  from { opacity: 0.3; }
+  to { opacity: 1; }
+}
+
+/* Scanning badge */
+.sdr-scanning-badge {
+  position: absolute;
+  top: 35px;
+  right: 10px;
+  background: rgba(0, 229, 255, 0.85);
+  color: #030810;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.5rem;
+  font-weight: bold;
+  z-index: 10;
+  box-shadow: 0 0 6px rgba(0, 229, 255, 0.4);
+}
+
+.sdr-scan-text {
+  animation: pulseGlow 1.5s infinite;
+}
+
+/* REC/SCAN buttons */
+.sdr-rec-btn {
+  background: rgba(255, 61, 0, 0.1);
+  border: 1px solid rgba(255, 61, 0, 0.25);
+  color: #ff3d00;
+  font-size: 0.55rem;
+  font-weight: bold;
+  padding: 3px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Space Mono', monospace;
+}
+.sdr-rec-btn:hover { background: rgba(255, 61, 0, 0.2); }
+.sdr-rec-btn.recording {
+  background: #ff3d00;
+  color: white;
+  border-color: #ff3d00;
+  box-shadow: 0 0 4px rgba(255, 61, 0, 0.5);
+}
+
+.rec-indicator-circle {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.sdr-scan-btn {
+  background: rgba(0, 229, 255, 0.1);
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  color: #00e5ff;
+  font-size: 0.55rem;
+  font-weight: bold;
+  padding: 3px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: 'Space Mono', monospace;
+}
+.sdr-scan-btn:hover { background: rgba(0, 229, 255, 0.2); }
+.sdr-scan-btn.scanning {
+  background: #00e5ff;
+  color: #030810;
+  border-color: #00e5ff;
+  box-shadow: 0 0 4px rgba(0, 229, 255, 0.5);
+}
+
+/* ============================================================
+   SATDUMP ENHANCED: IMAGE COMPOSITOR & ADJUSTMENTS
+   ============================================================ */
+
+.satdump-enhanced-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.satdump-ch-selector-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.satdump-ch-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.satdump-ch-btn {
+  flex: 1;
+  background: rgba(10, 22, 40, 0.6);
+  border: 1px solid rgba(90, 122, 154, 0.15);
+  color: #5a7a9a;
+  font-size: 0.45rem;
+  font-weight: bold;
+  padding: 3px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: 'Space Mono', monospace;
+}
+.satdump-ch-btn:hover { color: #e0e6ed; }
+.satdump-ch-btn.active {
+  background: rgba(0, 229, 255, 0.12);
+  color: #00e5ff;
+  border-color: rgba(0, 229, 255, 0.25);
+}
+
+.satdump-projection-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.satdump-projection-select {
+  background: rgba(10, 22, 40, 0.8);
+  border: 1px solid rgba(90, 122, 154, 0.2);
+  color: #8fa0b5;
+  font-size: 0.5rem;
+  padding: 3px;
+  border-radius: 3px;
+  font-family: 'Space Mono', monospace;
+  outline: none;
+}
+.satdump-projection-select:focus {
+  border-color: rgba(0, 229, 255, 0.3);
+}
+
+.satdump-sync-quality-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.satdump-sync-blocks {
+  display: flex;
+  gap: 3px;
+}
+
+.satdump-sync-block {
+  flex: 1;
+  height: 5px;
+  border-radius: 1px;
+}
+.satdump-sync-block.active {
+  background: #00c853;
+  box-shadow: 0 0 3px rgba(0, 200, 83, 0.5);
+}
+.satdump-sync-block.inactive {
+  background: #ff3d00;
+}
+
+.satdump-enhanced-visuals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.satdump-enhancements-sliders {
+  background: rgba(10, 22, 40, 0.5);
+  border: 1px solid rgba(90, 122, 154, 0.08);
+  border-radius: 4px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.satdump-slider-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.42rem;
+  color: #5a7a9a;
+}
+.satdump-slider-item input {
+  width: 100px;
+  height: 4px;
+  background: rgba(90, 122, 154, 0.2);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.satdump-canvases-row {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  gap: 10px;
+}
+
+.satdump-image-viewer-wrapper {
+  border: 1px solid rgba(90, 122, 154, 0.15);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* ============================================================
+   SIDEBAR SORTING & FAVORITES STAR BUTTONS
+   ============================================================ */
+
+.sidebar-sort-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 10px;
+  background: rgba(10, 22, 40, 0.3);
+  border-bottom: 1px solid rgba(90, 122, 154, 0.08);
+}
+
+.sort-label {
+  font-size: 0.45rem;
+  color: #5a7a9a;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+}
+
+.sort-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.sort-btn {
+  background: transparent;
+  border: 1px solid rgba(90, 122, 154, 0.15);
+  color: #5a7a9a;
+  font-size: 0.45rem;
+  font-weight: bold;
+  padding: 1px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: 'Space Mono', monospace;
+}
+.sort-btn:hover { color: #e0e6ed; }
+.sort-btn.active {
+  background: rgba(0, 229, 255, 0.12);
+  color: #00e5ff;
+  border-color: rgba(0, 229, 255, 0.25);
+}
+
+/* Star Buttons */
+.sat-fav-star-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #5a7a9a;
+  transition: all 0.2s ease;
+}
+.sat-fav-star-btn:hover {
+  transform: scale(1.2);
+  color: #ffc832;
+}
+.sat-fav-star-btn.fav {
+  color: #ffc832;
+  filter: drop-shadow(0 0 3px rgba(255, 200, 50, 0.4));
+}
+.sat-fav-star-btn.header-star {
+  margin-left: 4px;
+}
+.sat-fav-star-btn.header-star:hover {
+  transform: scale(1.3);
+}
+
+/* Category modifications */
+.category-btn.favorites.active {
+  background: rgba(255, 200, 50, 0.1);
+  color: #ffc832;
+  border-color: rgba(255, 200, 50, 0.25);
+}
+.category-btn.favorites .category-btn-count {
+  background: rgba(255, 200, 50, 0.15);
+  color: #ffc832;
+  border-color: rgba(255, 200, 50, 0.2);
+}
+

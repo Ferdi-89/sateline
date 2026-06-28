@@ -7,6 +7,9 @@ import SelectedSatellitePanel from './components/SelectedSatellitePanel';
 import TimeControls from './components/TimeControls';
 import ObserverPanel from './components/ObserverPanel';
 import SdrController from './components/SdrController';
+import DopplerPanel from './components/DopplerPanel';
+import RotorSimulator from './components/RotorSimulator';
+import MultiPassTable from './components/MultiPassTable';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Lazy-load CesiumMapView (heavy dependency ~30MB) only when user toggles to 3D
@@ -144,10 +147,30 @@ function App() {
   const [isPaused, setIsPaused] = useState(false);
   const [timeMultiplier, setTimeMultiplier] = useState(1);
   const [simTime, setSimTime] = useState(new Date());
+
+  // Favorites & Sorting State
+  const [favorites, setFavorites] = useState(() => {
+    try {
+      const saved = localStorage.getItem('sateline_favorites');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [sortBy, setSortBy] = useState('name'); // 'name' | 'norad'
+
+  useEffect(() => {
+    localStorage.setItem('sateline_favorites', JSON.stringify(favorites));
+  }, [favorites]);
   
   // SDR Panel Global Toggle State
   const [showSdrPanel, setShowSdrPanel] = useState(false);
   const [isSdrFullscreen, setIsSdrFullscreen] = useState(false);
+
+  // GPredict-style panel toggles
+  const [showDopplerPanel, setShowDopplerPanel] = useState(false);
+  const [showRotorPanel, setShowRotorPanel] = useState(false);
+  const [showPassTable, setShowPassTable] = useState(false);
 
   // Handle satellite selection (with auto-collapse sidebar on mobile)
   const handleSelectSatellite = (sat) => {
@@ -224,18 +247,32 @@ function App() {
     fetchAll();
   }, []);
 
-  // Filter by category and search
+  // Filter by category, search and sort
   const filteredSatellites = useMemo(() => {
     let sats = allSatellites;
-    if (category !== 'all') {
+    if (category === 'favorites') {
+      sats = sats.filter(s => favorites.includes(s.name));
+    } else if (category !== 'all') {
       sats = sats.filter(s => s.category === category);
     }
+    
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       sats = sats.filter(s => s.name.toLowerCase().includes(q));
     }
-    return sats;
-  }, [allSatellites, category, searchQuery]);
+
+    // Sort
+    const getNoradId = (tle1) => {
+      try { return tle1.substring(2, 7).trim(); } catch { return ''; }
+    };
+    
+    return [...sats].sort((a, b) => {
+      if (sortBy === 'norad') {
+        return getNoradId(a.tle1).localeCompare(getNoradId(b.tle1));
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }, [allSatellites, category, searchQuery, favorites, sortBy]);
 
   return (
     <div className="app-container">
@@ -295,6 +332,8 @@ function App() {
           isCameraLocked={isCameraLocked}
           setIsCameraLocked={setIsCameraLocked}
           observerLocation={observerLocation}
+          favorites={favorites}
+          setFavorites={setFavorites}
         />
       )}
 
@@ -320,6 +359,12 @@ function App() {
         setShowObserverPanel={setShowObserverPanel}
         showSdrPanel={showSdrPanel}
         setShowSdrPanel={setShowSdrPanel}
+        showDopplerPanel={showDopplerPanel}
+        setShowDopplerPanel={setShowDopplerPanel}
+        showRotorPanel={showRotorPanel}
+        setShowRotorPanel={setShowRotorPanel}
+        showPassTable={showPassTable}
+        setShowPassTable={setShowPassTable}
       />
 
       {/* Floating Observer Location Panel */}
@@ -351,6 +396,39 @@ function App() {
         </div>
       )}
 
+      {/* Floating Doppler Panel */}
+      {showDopplerPanel && (
+        <div className={`doppler-panel-floating ${selectedSatellite ? 'shifted' : ''} ${isSidebarOpen ? '' : 'sidebar-collapsed'}`}>
+          <DopplerPanel
+            sat={selectedSatellite}
+            simTime={simTime}
+            observerLocation={observerLocation}
+          />
+        </div>
+      )}
+
+      {/* Floating Rotor Simulator Panel */}
+      {showRotorPanel && (
+        <div className={`rotor-panel-floating ${selectedSatellite ? 'shifted' : ''} ${isSidebarOpen ? '' : 'sidebar-collapsed'}`}>
+          <RotorSimulator
+            sat={selectedSatellite}
+            simTime={simTime}
+            observerLocation={observerLocation}
+          />
+        </div>
+      )}
+
+      {/* Floating Multi-Pass Table */}
+      {showPassTable && (
+        <div className={`multipass-panel-floating ${isSidebarOpen ? '' : 'sidebar-collapsed'}`}>
+          <MultiPassTable
+            satellites={allSatellites}
+            observerLocation={observerLocation}
+            simTime={simTime}
+          />
+        </div>
+      )}
+
       {/* Sidebar Toggle Button */}
       <button
         className={`sidebar-toggle-btn ${isSidebarOpen ? '' : 'collapsed'}`}
@@ -371,6 +449,10 @@ function App() {
         selectedSatellite={selectedSatellite}
         onSelectSatellite={handleSelectSatellite}
         isOpen={isSidebarOpen}
+        favorites={favorites}
+        setFavorites={setFavorites}
+        sortBy={sortBy}
+        setSortBy={setSortBy}
       />
 
       {/* Bottom-right legend */}
