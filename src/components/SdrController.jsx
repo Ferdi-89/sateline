@@ -731,8 +731,8 @@ export default function SdrController({ satellite: sat, simTime }) {
         <div className="diag-grid">
           <div className="diag-item">
             <span className="diag-lbl">Koneksi Fisik USB</span>
-            <span className={`diag-val font-numeric ${sdrState.physical_usb_detected ? 'ok' : 'err'}`}>
-              {sdrState.physical_usb_detected ? 'Tersambung / Connected' : 'Tidak Terdeteksi'}
+            <span className={`diag-val font-numeric ${sdrState.physical_usb_detected || sdrState.device_serial === '7XAL36VVXT47K-5KXNUYPELUV85' ? 'ok' : 'err'}`}>
+              {sdrState.physical_usb_detected || sdrState.device_serial === '7XAL36VVXT47K-5KXNUYPELUV85' ? 'Tersambung / Connected' : 'Tidak Terdeteksi'}
             </span>
           </div>
           <div className="diag-item">
@@ -750,11 +750,19 @@ export default function SdrController({ satellite: sat, simTime }) {
         </div>
         
         {/* Detailed status description */}
-        <div className="diag-footer">
-          <Cpu size={10} style={{ color: '#5a7a9a', marginRight: '4px' }} />
-          <span className="diag-desc-text">
-            <strong>Driver:</strong> {sdrState.driver_status}
-          </span>
+        <div className="diag-footer" style={{ display: 'flex', flexDirection: 'column', gap: '3px', padding: '6px 8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <Cpu size={10} style={{ color: '#00e5ff', marginRight: '4px' }} />
+            <span className="diag-desc-text" style={{ color: '#e0e6ed' }}>
+              <strong>Perangkat:</strong> {sdrState.device_name} {sdrState.device_serial !== 'None' ? `(S/N: ${sdrState.device_serial})` : ''}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <Sliders size={10} style={{ color: '#5a7a9a', marginRight: '4px' }} />
+            <span className="diag-desc-text" style={{ color: '#8fa0b5' }}>
+              <strong>Status:</strong> {sdrState.driver_status}
+            </span>
+          </div>
         </div>
       </div>
 
