@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as satellite from 'satellite.js';
-import { X, Globe, Compass, Code, Activity, Target, Radio } from 'lucide-react';
+import { X, Globe, Compass, Code, Activity, Target, Radio, Star } from 'lucide-react';
 import SdrController from './SdrController';
 
 const CATEGORY_COLORS = {
@@ -18,6 +18,32 @@ const CATEGORY_LABELS = {
   starlink: 'STARLINK CONSTELLATION',
   other:    'GENERAL SATELLITE',
 };
+
+function formatBstar(str) {
+  try {
+    let clean = str.trim();
+    if (!clean || clean === '0' || clean === '00000-0') return '0.0000';
+    let sign = 1;
+    if (clean.startsWith('-')) {
+      sign = -1;
+      clean = clean.substring(1);
+    } else if (clean.startsWith('+')) {
+      clean = clean.substring(1);
+    }
+    // Find exponent separator: '-' or '+'
+    let sepIdx = clean.lastIndexOf('-');
+    if (sepIdx === -1) sepIdx = clean.lastIndexOf('+');
+    if (sepIdx === -1) return clean;
+
+    const mantissaStr = clean.substring(0, sepIdx);
+    const expStr = clean.substring(sepIdx);
+    const mantissa = parseFloat('0.' + mantissaStr);
+    const exp = parseInt(expStr);
+    return (sign * mantissa * Math.pow(10, exp)).toExponential(3);
+  } catch {
+    return str;
+  }
+}
 
 function parseTLEDetails(tle1, tle2) {
   try {
@@ -38,6 +64,11 @@ function parseTLEDetails(tle1, tle2) {
       ? `${Math.floor(periodMinutes)}m ${Math.round((periodMinutes % 1) * 60)}s`
       : 'N/A';
 
+    // Orbit Decay Rates (SDR# / GPredict parity)
+    const nDotRaw = tle1.substring(33, 43).trim();
+    const bstarRaw = tle1.substring(53, 61).trim();
+    const bstarFormatted = formatBstar(bstarRaw);
+
     return {
       noradId,
       intDesg,
@@ -48,6 +79,8 @@ function parseTLEDetails(tle1, tle2) {
       meanAnomaly: meanAnomaly.toFixed(4) + '°',
       meanMotion: meanMotion.toFixed(8) + ' rev/day',
       periodStr,
+      decayRate: nDotRaw,
+      bstar: bstarFormatted,
     };
   } catch {
     return null;
@@ -275,6 +308,8 @@ export default function SelectedSatellitePanel({
   isCameraLocked,
   setIsCameraLocked,
   observerLocation,
+  favorites = [],
+  setFavorites,
 }) {
   const [showTle, setShowTle] = useState(false);
   const canvasRef = useRef(null);
@@ -287,6 +322,36 @@ export default function SelectedSatellitePanel({
     if (!observerLocation || !sat) return [];
     return getUpcomingPasses(sat.tle1, sat.tle2, observerLocation, new Date(roundedSimTime * 5 * 60 * 1000));
   }, [sat, observerLocation, roundedSimTime]);
+
+  const nextPass = passes && passes.length > 0 ? passes[0] : null;
+  const [countdownText, setCountdownText] = useState('');
+
+  useEffect(() => {
+    if (!nextPass) {
+      setCountdownText('');
+      return;
+    }
+    const updateCountdown = () => {
+      const now = simTime.getTime();
+      const rise = nextPass.riseTime.getTime();
+      const set = nextPass.setTime.getTime();
+      
+      if (now < rise) {
+        const diff = rise - now;
+        const h = Math.floor(diff / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        const s = Math.floor((diff % 60000) / 1000);
+        setCountdownText(`AOS: ${h > 0 ? h + 'j ' : ''}${m}m ${s}s`);
+      } else if (now >= rise && now <= set) {
+        setCountdownText('SATELLITE PASS ACTIVE 🟢');
+      } else {
+        setCountdownText('Pass ended.');
+      }
+    };
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [nextPass, simTime]);
 
   // Calculate live telemetry metrics using current simulated time
   let liveProps = null;
@@ -462,7 +527,33 @@ export default function SelectedSatellitePanel({
           <span className="details-subtitle" style={{ color: color }}>
             {CATEGORY_LABELS[sat.category] || 'SATELLITE'}
           </span>
-          <h2 className="details-title" title={sat.name}>{sat.name}</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <h2 className="details-title" title={sat.name}>{sat.name}</h2>
+            <button
+              className={`sat-fav-star-btn header-star ${favorites.includes(sat.name) ? 'fav' : ''}`}
+              onClick={() => {
+                if (favorites.includes(sat.name)) {
+                  setFavorites(favorites.filter(name => name !== sat.name));
+                } else {
+                  setFavorites([...favorites, sat.name]);
+                }
+              }}
+              title={favorites.includes(sat.name) ? "Remove from Favorites" : "Add to Favorites"}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '2px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: favorites.includes(sat.name) ? '#ffc832' : '#5a7a9a',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <Star size={13} fill={favorites.includes(sat.name) ? "#ffc832" : "none"} />
+            </button>
+          </div>
           {viewMode === '3d' && (
             <button
               className={`camera-lock-btn ${isCameraLocked ? 'active' : ''}`}
@@ -665,6 +756,22 @@ export default function SelectedSatellitePanel({
               </div>
             </div>
 
+            {countdownText && (
+              <div className="next-pass-countdown-container" style={{
+                background: 'rgba(0, 229, 255, 0.05)',
+                border: '1px solid rgba(0, 229, 255, 0.15)',
+                borderRadius: '4px',
+                padding: '6px 8px',
+                marginBottom: '8px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <span style={{ fontSize: '0.45rem', color: '#5a7a9a', fontWeight: 'bold', letterSpacing: '0.5px' }}>COUNTDOWN TO AOS</span>
+                <span className="font-numeric" style={{ fontSize: '0.6rem', color: '#00e5ff', fontWeight: 'bold' }}>{countdownText}</span>
+              </div>
+            )}
+
             {passes && passes.length > 0 ? (
               <div className="pass-card-list">
                 {passes.map((pass, index) => {
@@ -781,6 +888,25 @@ export default function SelectedSatellitePanel({
                 <td>MEAN ANOMALY</td>
                 <td className="font-numeric">{kep.meanAnomaly}</td>
               </tr>
+              <tr>
+                <td>ORBIT DECAY RATE</td>
+                <td className="font-numeric">{kep.decayRate || '0.0000'}</td>
+              </tr>
+              <tr>
+                <td>ORBITAL DRAG (B*)</td>
+                <td className="font-numeric">{kep.bstar || '0.0000'}</td>
+              </tr>
+              <tr>
+                <td>FOOTPRINT RADIUS</td>
+                <td className="font-numeric value-highlight">
+                  {(() => {
+                    if (!rawAlt) return 'N/A';
+                    const R_earth = 6371;
+                    const theta = Math.acos(R_earth / (R_earth + rawAlt));
+                    return Math.round(theta * R_earth) + ' km';
+                  })()}
+                </td>
+              </tr>
             </tbody>
           </table>
         ) : (
@@ -819,6 +945,117 @@ export default function SelectedSatellitePanel({
                 <tr>
                   <td>Primary Mission</td>
                   <td>AIS Ship tracking, Disaster APRS, FM Voice Repeater</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* Radio & Mission Info for Telkom-4 (Merah Putih) */}
+      {(sat.name.includes('TELKOM-4') || sat.name.includes('Telkom-4') || (kep && (kep.noradId === '43587' || kep.noradId === 43587))) && (
+        <>
+          <div className="details-divider"></div>
+          <div className="details-section">
+            <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Radio size={12} className="section-icon" style={{ color: color }} />
+              TELKOM-4 (MERAH PUTIH) SPECIFICATIONS
+            </h3>
+            <table className="details-table">
+              <tbody>
+                <tr>
+                  <td>C-Band Beacon (RF)</td>
+                  <td>4199.000 MHz</td>
+                </tr>
+                <tr>
+                  <td>LNB IF (Intermediate)</td>
+                  <td>951.000 MHz (LO: 5150 MHz)</td>
+                </tr>
+                <tr>
+                  <td>Capacity</td>
+                  <td>60 C-Band Transponders</td>
+                </tr>
+                <tr>
+                  <td>Operator / Country</td>
+                  <td>Telkom Indonesia / Indonesia 🇮🇩</td>
+                </tr>
+                <tr>
+                  <td>Primary Mission</td>
+                  <td>Satellite TV, VSAT, and High-capacity Telecom</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* Radio & Mission Info for BRISat */}
+      {(sat.name.includes('BRISat') || sat.name.includes('Brisat') || (kep && (kep.noradId === '41591' || kep.noradId === 41591))) && (
+        <>
+          <div className="details-divider"></div>
+          <div className="details-section">
+            <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Radio size={12} className="section-icon" style={{ color: color }} />
+              BRISAT SPECIFICATIONS
+            </h3>
+            <table className="details-table">
+              <tbody>
+                <tr>
+                  <td>C-Band Beacon (RF)</td>
+                  <td>4185.000 MHz</td>
+                </tr>
+                <tr>
+                  <td>LNB IF (Intermediate)</td>
+                  <td>965.000 MHz (LO: 5150 MHz)</td>
+                </tr>
+                <tr>
+                  <td>Capacity</td>
+                  <td>36 C-band & 9 Ku-band Transponders</td>
+                </tr>
+                <tr>
+                  <td>Operator / Country</td>
+                  <td>Bank Rakyat Indonesia / Indonesia 🇮🇩</td>
+                </tr>
+                <tr>
+                  <td>Primary Mission</td>
+                  <td>Dedicated Banking & Financial Communication Network</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* Radio & Mission Info for SATRIA-1 (Nusantara) */}
+      {(sat.name.includes('SATRIA-1') || sat.name.includes('Satria-1') || sat.name.includes('Nusantara') || (kep && (kep.noradId === '57045' || kep.noradId === 57045))) && (
+        <>
+          <div className="details-divider"></div>
+          <div className="details-section">
+            <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Radio size={12} className="section-icon" style={{ color: color }} />
+              SATRIA-1 (NUSANTARA) SPECIFICATIONS
+            </h3>
+            <table className="details-table">
+              <tbody>
+                <tr>
+                  <td>Ka-Band Beacon (RF)</td>
+                  <td>20200.000 MHz (20.20 GHz)</td>
+                </tr>
+                <tr>
+                  <td>LNB IF (Intermediate)</td>
+                  <td>950.000 MHz (LO: 19.25 GHz)</td>
+                </tr>
+                <tr>
+                  <td>Capacity</td>
+                  <td>150 Gbps High Throughput Satellite (Ka-band)</td>
+                </tr>
+                <tr>
+                  <td>Operator / Country</td>
+                  <td>PT Pasifik Satelit Nusantara (PSN) / Indonesia 🇮🇩</td>
+                </tr>
+                <tr>
+                  <td>Primary Mission</td>
+                  <td>Free Broadband Internet for Public Facilities (Schools, Clinics)</td>
                 </tr>
               </tbody>
             </table>

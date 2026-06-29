@@ -7,6 +7,9 @@ import SelectedSatellitePanel from './components/SelectedSatellitePanel';
 import TimeControls from './components/TimeControls';
 import ObserverPanel from './components/ObserverPanel';
 import SdrController from './components/SdrController';
+import DopplerPanel from './components/DopplerPanel';
+import RotorSimulator from './components/RotorSimulator';
+import MultiPassTable from './components/MultiPassTable';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Lazy-load CesiumMapView (heavy dependency ~30MB) only when user toggles to 3D
@@ -42,6 +45,60 @@ function parseTLE(text, category) {
     }
   }
   return sats;
+}
+
+// Helper to fetch satellite from CelesTrak by NORAD ID with a local fallback
+async function fetchSatelliteByNorad(noradId, name, fallbackTle1, fallbackTle2, category = 'other') {
+  const fallback = [{
+    name,
+    tle1: fallbackTle1,
+    tle2: fallbackTle2,
+    category,
+  }];
+  try {
+    const res = await fetch(`https://celestrak.org/NORAD/elements/gp.php?CATNR=${noradId}&FORMAT=tle`);
+    if (res.ok) {
+      const text = await res.text();
+      const sats = parseTLE(text, category);
+      if (sats && sats.length > 0) {
+        sats[0].name = name;
+        return sats;
+      }
+    }
+  } catch (err) {
+    console.warn(`Unable to reach CelesTrak for ${name}, using fallback TLE:`, err);
+  }
+  return fallback;
+}
+
+// Fetch Telkom-4 (Merah Putih)
+async function fetchTelkom4() {
+  return fetchSatelliteByNorad(
+    '43587',
+    'TELKOM-4 (Merah Putih)',
+    '1 43587U 18064A   26171.41343206 .00000000 00000-0 00000+0 0 9995',
+    '2 43587   0.0169  12.0761 0001515 103.4112  49.9772  1.00269652 28915'
+  );
+}
+
+// Fetch BRISat
+async function fetchBrisat() {
+  return fetchSatelliteByNorad(
+    '41591',
+    'BRISat',
+    '1 41591U 16039A   26167.78593465 .00000000 00000-0 00000+0 0 9997',
+    '2 41591   0.0232 337.3604 0001888 105.9123 255.2030  1.00268877 36602'
+  );
+}
+
+// Fetch SATRIA-1 (Nusantara Tiga)
+async function fetchSatria1() {
+  return fetchSatelliteByNorad(
+    '57045',
+    'SATRIA-1 (Nusantara)',
+    '1 57045U 23086A   26158.58838443 -.00000220 00000-0 00000+0 0 9999',
+    '2 57045   0.0374 344.8283 0003568   0.3771 268.6018  1.00269379  9668'
+  );
 }
 
 // Fetch LAPAN-A2 from SatNOGS DB API with a local fallback TLE
@@ -140,9 +197,30 @@ function App() {
   const [isPaused, setIsPaused] = useState(false);
   const [timeMultiplier, setTimeMultiplier] = useState(1);
   const [simTime, setSimTime] = useState(new Date());
+
+  // Favorites & Sorting State
+  const [favorites, setFavorites] = useState(() => {
+    try {
+      const saved = localStorage.getItem('sateline_favorites');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [sortBy, setSortBy] = useState('name'); // 'name' | 'norad'
+
+  useEffect(() => {
+    localStorage.setItem('sateline_favorites', JSON.stringify(favorites));
+  }, [favorites]);
   
   // SDR Panel Global Toggle State
   const [showSdrPanel, setShowSdrPanel] = useState(false);
+  const [isSdrFullscreen, setIsSdrFullscreen] = useState(false);
+
+  // GPredict-style panel toggles
+  const [showDopplerPanel, setShowDopplerPanel] = useState(false);
+  const [showRotorPanel, setShowRotorPanel] = useState(false);
+  const [showPassTable, setShowPassTable] = useState(false);
 
   // Handle satellite selection (with auto-collapse sidebar on mobile)
   const handleSelectSatellite = (sat) => {
@@ -196,7 +274,10 @@ function App() {
             }
           }),
           fetchLapanA2(),
-          fetchNoaaSatellites()
+          fetchNoaaSatellites(),
+          fetchTelkom4(),
+          fetchBrisat(),
+          fetchSatria1()
         ]);
         // Merge all groups; deduplicate by name
         const seen = new Set();
@@ -217,18 +298,32 @@ function App() {
     fetchAll();
   }, []);
 
-  // Filter by category and search
+  // Filter by category, search and sort
   const filteredSatellites = useMemo(() => {
     let sats = allSatellites;
-    if (category !== 'all') {
+    if (category === 'favorites') {
+      sats = sats.filter(s => favorites.includes(s.name));
+    } else if (category !== 'all') {
       sats = sats.filter(s => s.category === category);
     }
+    
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       sats = sats.filter(s => s.name.toLowerCase().includes(q));
     }
-    return sats;
-  }, [allSatellites, category, searchQuery]);
+
+    // Sort
+    const getNoradId = (tle1) => {
+      try { return tle1.substring(2, 7).trim(); } catch { return ''; }
+    };
+    
+    return [...sats].sort((a, b) => {
+      if (sortBy === 'norad') {
+        return getNoradId(a.tle1).localeCompare(getNoradId(b.tle1));
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }, [allSatellites, category, searchQuery, favorites, sortBy]);
 
   return (
     <div className="app-container">
@@ -288,6 +383,8 @@ function App() {
           isCameraLocked={isCameraLocked}
           setIsCameraLocked={setIsCameraLocked}
           observerLocation={observerLocation}
+          favorites={favorites}
+          setFavorites={setFavorites}
         />
       )}
 
@@ -313,6 +410,12 @@ function App() {
         setShowObserverPanel={setShowObserverPanel}
         showSdrPanel={showSdrPanel}
         setShowSdrPanel={setShowSdrPanel}
+        showDopplerPanel={showDopplerPanel}
+        setShowDopplerPanel={setShowDopplerPanel}
+        showRotorPanel={showRotorPanel}
+        setShowRotorPanel={setShowRotorPanel}
+        showPassTable={showPassTable}
+        setShowPassTable={setShowPassTable}
       />
 
       {/* Floating Observer Location Panel */}
@@ -328,14 +431,52 @@ function App() {
 
       {/* Floating SDR Monitor Panel */}
       {showSdrPanel && (
-        <div className={`sdr-panel-floating ${selectedSatellite ? 'shifted' : ''} ${isSidebarOpen ? '' : 'sidebar-collapsed'}`}>
+        <div className={`sdr-panel-floating ${selectedSatellite ? 'shifted' : ''} ${isSidebarOpen ? '' : 'sidebar-collapsed'} ${isSdrFullscreen ? 'fullscreen' : ''}`}>
           <div className="sdr-panel-floating-header">
             <h3>SDR MONITOR CONSOLE</h3>
             <button className="sdr-panel-close-btn" onClick={() => setShowSdrPanel(false)} title="Close SDR Panel">✕</button>
           </div>
           <div className="sdr-panel-floating-body">
-            <SdrController satellite={selectedSatellite} simTime={simTime} />
+            <SdrController 
+              satellite={selectedSatellite} 
+              simTime={simTime} 
+              isFullscreen={isSdrFullscreen} 
+              setIsFullscreen={setIsSdrFullscreen} 
+            />
           </div>
+        </div>
+      )}
+
+      {/* Floating Doppler Panel */}
+      {showDopplerPanel && (
+        <div className={`doppler-panel-floating ${selectedSatellite ? 'shifted' : ''} ${isSidebarOpen ? '' : 'sidebar-collapsed'}`}>
+          <DopplerPanel
+            sat={selectedSatellite}
+            simTime={simTime}
+            observerLocation={observerLocation}
+          />
+        </div>
+      )}
+
+      {/* Floating Rotor Simulator Panel */}
+      {showRotorPanel && (
+        <div className={`rotor-panel-floating ${selectedSatellite ? 'shifted' : ''} ${isSidebarOpen ? '' : 'sidebar-collapsed'}`}>
+          <RotorSimulator
+            sat={selectedSatellite}
+            simTime={simTime}
+            observerLocation={observerLocation}
+          />
+        </div>
+      )}
+
+      {/* Floating Multi-Pass Table */}
+      {showPassTable && (
+        <div className={`multipass-panel-floating ${isSidebarOpen ? '' : 'sidebar-collapsed'}`}>
+          <MultiPassTable
+            satellites={allSatellites}
+            observerLocation={observerLocation}
+            simTime={simTime}
+          />
         </div>
       )}
 
@@ -359,6 +500,10 @@ function App() {
         selectedSatellite={selectedSatellite}
         onSelectSatellite={handleSelectSatellite}
         isOpen={isSidebarOpen}
+        favorites={favorites}
+        setFavorites={setFavorites}
+        sortBy={sortBy}
+        setSortBy={setSortBy}
       />
 
       {/* Bottom-right legend */}

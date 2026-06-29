@@ -339,6 +339,113 @@ export default function MapView({
       ctx.stroke();
     });
 
+    /* 3b — Sun terminator (day/night shading) */
+    {
+      // Calculate sun position using simplified solar geometry
+      const dayOfYear = Math.floor((localSimTime - new Date(localSimTime.getFullYear(), 0, 0)) / 86400000);
+      const hourUTC = localSimTime.getUTCHours() + localSimTime.getUTCMinutes() / 60 + localSimTime.getUTCSeconds() / 3600;
+      // Solar declination (simplified)
+      const declination = -23.44 * Math.cos((2 * Math.PI / 365) * (dayOfYear + 10));
+      const decRad = declination * Math.PI / 180;
+      // Sub-solar longitude
+      const subSolarLng = (180 - hourUTC * 15 + 360) % 360 - 180;
+
+      // Draw night overlay as a filled polygon
+      ctx.save();
+      ctx.beginPath();
+      // Top edge
+      const terminatorPoints = [];
+      for (let lon = -180; lon <= 180; lon += 2) {
+        // Hour angle
+        const lonRad = (lon - subSolarLng) * Math.PI / 180;
+        // Terminator latitude: cos(lat) = -tan(dec)*tan(ha) ... simplified
+        // More accurate: the terminator is where sun elevation = 0
+        // sin(0) = sin(dec)*sin(lat) + cos(dec)*cos(lat)*cos(ha)
+        // 0 = sin(dec)*sin(lat) + cos(dec)*cos(lat)*cos(ha)
+        // tan(lat) = -cos(ha) * cos(dec) / sin(dec) if dec != 0
+        // lat = atan(-cos(lonRad) / tan(decRad))
+        let tLat;
+        if (Math.abs(declination) < 0.01) {
+          tLat = (lonRad > -Math.PI / 2 && lonRad < Math.PI / 2) ? 90 : -90;
+          tLat = Math.atan(-Math.cos(lonRad) / 0.0001) * 180 / Math.PI;
+        } else {
+          tLat = Math.atan(-Math.cos(lonRad) / Math.tan(decRad)) * 180 / Math.PI;
+        }
+        tLat = Math.max(-85, Math.min(85, tLat));
+        terminatorPoints.push({ lon, lat: tLat });
+      }
+
+      // Determine which side is night: if subsolar lon is on the left, night is on the right
+      // Night is where sun is below horizon. The "dark" side depends on which hemisphere faces away.
+      // We shade the area OPPOSITE to the subsolar point.
+      
+      // Build the night polygon: terminator line + top or bottom edge of map
+      // If declination > 0 (northern summer), night is where sun doesn't reach = far side
+      // Simple approach: shade from terminator to the bottom if subsolar is "above", or top if "below"
+      
+      ctx.beginPath();
+      // Start from bottom-left or top-left depending on sun direction
+      const nightTop = declination >= 0;
+      
+      if (nightTop) {
+        // Night caps the top at high latitudes: shade BELOW terminator on the far side
+        // Actually, we need to shade the opposite side of the terminator from the subsolar point
+        // Night region: from bottom of map, up to the terminator
+        const firstPt = project(-180, -85, mapW, mapH, offsetX, offsetY);
+        ctx.moveTo(firstPt[0], firstPt[1]);
+        // Go along bottom edge
+        const lastPt = project(180, -85, mapW, mapH, offsetX, offsetY);
+        ctx.lineTo(lastPt[0], lastPt[1]);
+        // Go up along right edge to terminator
+        for (let i = terminatorPoints.length - 1; i >= 0; i--) {
+          const pt = project(terminatorPoints[i].lon, terminatorPoints[i].lat, mapW, mapH, offsetX, offsetY);
+          ctx.lineTo(pt[0], pt[1]);
+        }
+        ctx.closePath();
+      } else {
+        // Shade above the terminator
+        const firstPt = project(-180, 85, mapW, mapH, offsetX, offsetY);
+        ctx.moveTo(firstPt[0], firstPt[1]);
+        const lastPt = project(180, 85, mapW, mapH, offsetX, offsetY);
+        ctx.lineTo(lastPt[0], lastPt[1]);
+        for (let i = terminatorPoints.length - 1; i >= 0; i--) {
+          const pt = project(terminatorPoints[i].lon, terminatorPoints[i].lat, mapW, mapH, offsetX, offsetY);
+          ctx.lineTo(pt[0], pt[1]);
+        }
+        ctx.closePath();
+      }
+      ctx.fillStyle = 'rgba(0, 0, 15, 0.35)';
+      ctx.fill();
+
+      // Draw the terminator line itself
+      ctx.beginPath();
+      const firstTerm = project(terminatorPoints[0].lon, terminatorPoints[0].lat, mapW, mapH, offsetX, offsetY);
+      ctx.moveTo(firstTerm[0], firstTerm[1]);
+      for (let i = 1; i < terminatorPoints.length; i++) {
+        const pt = project(terminatorPoints[i].lon, terminatorPoints[i].lat, mapW, mapH, offsetX, offsetY);
+        ctx.lineTo(pt[0], pt[1]);
+      }
+      ctx.strokeStyle = 'rgba(255, 200, 50, 0.5)';
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([6, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Draw sun sub-solar point marker
+      const sunPt = project(subSolarLng, declination, mapW, mapH, offsetX, offsetY);
+      ctx.beginPath();
+      ctx.arc(sunPt[0], sunPt[1], 5 / scale, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffc832';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(sunPt[0], sunPt[1], 8 / scale, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255, 200, 50, 0.4)';
+      ctx.lineWidth = 1 / scale;
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
     /* 4 — Orbit track */
     if (orbitRef.current && sel) {
       const color = CATEGORY_COLORS[sel.category] || CATEGORY_COLORS.other;
