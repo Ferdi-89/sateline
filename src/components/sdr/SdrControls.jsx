@@ -1,4 +1,4 @@
-import { Volume2, VolumeX } from 'lucide-react';
+import { Volume2, VolumeX, Power, Square, Radio } from 'lucide-react';
 
 export default function SdrControls({
   isReceiving, onToggle,
@@ -7,7 +7,6 @@ export default function SdrControls({
   volume, onVolumeChange, isMuted, onMuteToggle,
   onAdjustFreq,
   onToggleSettings,
-  audioNodesRef,
 }) {
   return (
     <div className="sdr-receiver-controls">
@@ -18,7 +17,9 @@ export default function SdrControls({
           onClick={onToggle}
           title={isReceiving ? 'Stop RF Stream' : 'Start RF Stream'}
         >
-          <span>{isReceiving ? '⏹ STOP RX' : '▶ START RX'}</span>
+          <Power size={14} />
+          <span>{isReceiving ? 'STOP' : 'START'}</span>
+          {isReceiving && <span className="rx-blink-dot"></span>}
         </button>
 
         {isReceiving && (
