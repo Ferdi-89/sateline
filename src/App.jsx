@@ -6,7 +6,7 @@ import Legend from './components/Legend';
 import SelectedSatellitePanel from './components/SelectedSatellitePanel';
 import TimeControls from './components/TimeControls';
 import ObserverPanel from './components/ObserverPanel';
-import SdrController from './components/SdrController';
+import SdrController from './components/sdr/SdrController';
 import DopplerPanel from './components/DopplerPanel';
 import RotorSimulator from './components/RotorSimulator';
 import MultiPassTable from './components/MultiPassTable';

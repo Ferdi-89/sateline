@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as satellite from 'satellite.js';
 import { X, Globe, Compass, Code, Activity, Target, Radio, Star } from 'lucide-react';
-import SdrController from './SdrController';
+import SdrController from './sdr/SdrController';
 
 const CATEGORY_COLORS = {
   station:  '#00e5ff',
