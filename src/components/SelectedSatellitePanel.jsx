@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as satellite from 'satellite.js';
 import { X, Globe, Compass, Code, Activity, Target, Radio, Star } from 'lucide-react';
-import SdrController from './SdrController';
+import SdrController from './sdr/SdrController';
 
 const CATEGORY_COLORS = {
   station:  '#00e5ff',
@@ -527,10 +527,10 @@ export default function SelectedSatellitePanel({
           <span className="details-subtitle" style={{ color: color }}>
             {CATEGORY_LABELS[sat.category] || 'SATELLITE'}
           </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div className="details-title-row">
             <h2 className="details-title" title={sat.name}>{sat.name}</h2>
             <button
-              className={`sat-fav-star-btn header-star ${favorites.includes(sat.name) ? 'fav' : ''}`}
+              className={`dt-fav-btn ${favorites.includes(sat.name) ? 'fav' : ''}`}
               onClick={() => {
                 if (favorites.includes(sat.name)) {
                   setFavorites(favorites.filter(name => name !== sat.name));
@@ -539,19 +539,9 @@ export default function SelectedSatellitePanel({
                 }
               }}
               title={favorites.includes(sat.name) ? "Remove from Favorites" : "Add to Favorites"}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '2px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: favorites.includes(sat.name) ? '#ffc832' : '#5a7a9a',
-                transition: 'all 0.2s ease',
-              }}
             >
-              <Star size={13} fill={favorites.includes(sat.name) ? "#ffc832" : "none"} />
+              <Star size={14} fill={favorites.includes(sat.name) ? "#ffc832" : "none"} />
+              <span className="dt-fav-label">{favorites.includes(sat.name) ? 'FAVORITE' : 'ADD FAV'}</span>
             </button>
           </div>
           {viewMode === '3d' && (

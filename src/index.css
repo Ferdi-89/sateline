@@ -726,6 +726,43 @@ canvas.map-area {
   white-space: nowrap;
 }
 
+.details-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dt-fav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(10, 22, 40, 0.5);
+  border: 1px solid rgba(90, 122, 154, 0.25);
+  border-radius: 3px;
+  padding: 3px 7px;
+  cursor: pointer;
+  color: #5a7a9a;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.dt-fav-btn:hover {
+  border-color: #ffc832;
+  color: #ffc832;
+  background: rgba(255, 200, 50, 0.08);
+  box-shadow: 0 0 8px rgba(255, 200, 50, 0.15);
+}
+.dt-fav-btn.fav {
+  border-color: #ffc832;
+  color: #ffc832;
+  background: rgba(255, 200, 50, 0.12);
+  box-shadow: 0 0 8px rgba(255, 200, 50, 0.15);
+}
+.dt-fav-label {
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
 .details-close-btn {
   background: transparent;
   border: none;
@@ -2355,6 +2392,16 @@ canvas.map-area {
   color: #ffffff;
   box-shadow: 0 0 10px rgba(0, 200, 83, 0.2);
   animation: pulseGreenBorder 2.0s infinite;
+  gap: 6px;
+}
+
+.rx-blink-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #00c853;
+  box-shadow: 0 0 6px #00c853;
+  animation: pulse 1s infinite;
 }
 
 @keyframes pulseGreenBorder {
