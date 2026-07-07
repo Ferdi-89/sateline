@@ -32,27 +32,61 @@ export function getSatellitePresets(sat) {
       { label: 'Ka-Band LNB IF',      freq: 950.000,   mode: 'FM',  desc: 'LNB IF (LO: 19.25 GHz)' },
       { label: 'Broadband Data',      freq: 19950.000,  mode: 'DAB', desc: 'Ka-Band VSAT Stream' },
     );
-  } else if (sat.category === 'weather') {
-    if (name.includes('NOAA 15')) list.push({ label: 'APT Downlink', freq: 137.620, mode: 'FM', desc: 'NOAA 15 APT 137.62 MHz' });
-    else if (name.includes('NOAA 18')) list.push({ label: 'APT Downlink', freq: 137.9125, mode: 'FM', desc: 'NOAA 18 APT 137.9125 MHz' });
-    else if (name.includes('NOAA 19')) list.push({ label: 'APT Downlink', freq: 137.100, mode: 'FM', desc: 'NOAA 19 APT 137.1 MHz' });
-    else list.push({ label: 'NOAA APT Band', freq: 137.500, mode: 'FM', desc: 'APT Weather Satellite Band' });
-    list.push({ label: 'HRPT Downlink', freq: 1698.000, mode: 'FM', desc: 'High Rate Picture Transmit' });
+  } else if (name.includes('NOAA 15')) {
+    list.push({ label: 'APT Downlink', freq: 137.620, mode: 'FM', desc: 'Weather Image Transmit (Real-time)' });
+    list.push({ label: 'DSB Beacon', freq: 137.770, mode: 'FM', desc: 'Digital Space Beacon (Telemetry)' });
+  } else if (name.includes('NOAA 18')) {
+    list.push({ label: 'APT Downlink', freq: 137.9125, mode: 'FM', desc: 'Weather Image Transmit (Real-time)' });
+    list.push({ label: 'DSB Beacon', freq: 137.350, mode: 'FM', desc: 'Digital Space Beacon (Telemetry)' });
+  } else if (name.includes('NOAA 19')) {
+    list.push({ label: 'APT Downlink', freq: 137.100, mode: 'FM', desc: 'Weather Image Transmit (Real-time)' });
+    list.push({ label: 'DSB Beacon', freq: 137.890, mode: 'FM', desc: 'Digital Space Beacon (Telemetry)' });
+  } else if (name.includes('METEOR-M') || name.includes('METEOR M')) {
+    list.push({ label: 'LRPT Downlink', freq: 137.100, mode: 'FM', desc: 'Low Resolution Picture Transmission' });
+    list.push({ label: 'LRPT Secondary', freq: 137.900, mode: 'FM', desc: 'Alternative Weather Picture Downlink' });
+  } else if (name.includes('ISS') || name.includes('ARISS') || name.includes('ZARYA')) {
+    list.push({ label: 'ISS Voice Downlink', freq: 437.800, mode: 'FM', desc: 'Crossband Repeater Downlink' });
+    list.push({ label: 'ISS Packet Radio', freq: 145.825, mode: 'FM', desc: 'APRS 1200 Baud Simplex' });
+    list.push({ label: 'ISS Voice Uplink', freq: 145.990, mode: 'FM', desc: 'Repeater Uplink (PL 67.0)' });
+  } else if (name.includes('SO-50') || name.includes('SAUDISAT-1C')) {
+    list.push({ label: 'SO-50 Downlink', freq: 436.795, mode: 'FM', desc: 'FM Voice Transponder' });
+    list.push({ label: 'SO-50 Uplink', freq: 145.850, mode: 'FM', desc: 'Voice Uplink (PL 67.0)' });
+  } else if (name.includes('AO-91') || name.includes('FOX-1B')) {
+    list.push({ label: 'AO-91 Downlink', freq: 145.960, mode: 'FM', desc: 'Fox-1B Voice Repeater' });
+    list.push({ label: 'AO-91 Uplink', freq: 435.250, mode: 'FM', desc: 'Voice Uplink (PL 67.0)' });
+  } else if (name.includes('AO-92') || name.includes('FOX-1D')) {
+    list.push({ label: 'AO-92 Downlink', freq: 145.880, mode: 'FM', desc: 'Fox-1D Voice Repeater' });
+    list.push({ label: 'AO-92 Uplink U/V', freq: 435.350, mode: 'FM', desc: 'U/V FM Voice Uplink' });
+    list.push({ label: 'AO-92 L-Band Up', freq: 1267.350, mode: 'FM', desc: 'L-Band FM Voice Uplink' });
   } else if (sat.category === 'gps') {
-    list.push(
-      { label: 'L1 C/A',    freq: 1575.420, mode: 'AM', desc: 'GPS L1 Coarse Acquisition' },
-      { label: 'L2 P(Y)',   freq: 1227.600, mode: 'AM', desc: 'GPS L2 Encrypted P(Y) Code' },
-    );
-  } else if (name.includes('ISS')) {
-    list.push(
-      { label: 'ISS FM Voice',    freq: 437.800, mode: 'FM', desc: 'NA1SS Crossband Repeater' },
-      { label: 'ISS APRS Packet', freq: 145.825, mode: 'FM', desc: 'RS0ISS APRS Digipeater' },
-    );
+    if (name.includes('GLONASS')) {
+      list.push({ label: 'GLONASS L1 Carrier', freq: 1602.000, mode: 'AM', desc: 'Ch 0 Primary L1 Carrier' });
+      list.push({ label: 'GLONASS L2 Carrier', freq: 1246.000, mode: 'AM', desc: 'Ch 0 Secondary L2 Carrier' });
+    } else if (name.includes('GALILEO')) {
+      list.push({ label: 'Galileo E1 Carrier', freq: 1575.420, mode: 'AM', desc: 'E1 Open Service Signal' });
+      list.push({ label: 'Galileo E5a Carrier', freq: 1176.450, mode: 'AM', desc: 'E5a Navigation Signal' });
+      list.push({ label: 'Galileo E6 Signal', freq: 1278.750, mode: 'AM', desc: 'E6 High Accuracy Service' });
+    } else if (name.includes('BEIDOU')) {
+      list.push({ label: 'Beidou B1 Carrier', freq: 1561.098, mode: 'AM', desc: 'B1 Primary Signal' });
+      list.push({ label: 'Beidou B2 Carrier', freq: 1207.140, mode: 'AM', desc: 'B2 Navigation Signal' });
+    } else {
+      list.push({ label: 'GPS L1 Carrier', freq: 1575.420, mode: 'AM', desc: 'GPS Primary Signal' });
+      list.push({ label: 'GPS L2 Carrier', freq: 1227.600, mode: 'AM', desc: 'GPS Secondary Signal' });
+    }
+  } else if (sat.category === 'weather') {
+    list.push({ label: 'NOAA APT Downlink', freq: 137.500, mode: 'FM', desc: 'Common APT Satellite Band' });
+    list.push({ label: 'Meteor-M LRPT', freq: 137.100, mode: 'FM', desc: 'LRPT Digital Scan' });
+  } else if (sat.category === 'starlink') {
+    list.push({ label: 'Ku Beacon Downlink', freq: 1170.000, mode: 'FM', desc: 'Ku-Band Space Beacon' });
+    list.push({ label: 'Ku Gateway Carrier', freq: 1220.000, mode: 'FM', desc: 'Ku-Band User Data Link' });
+  } else if (name.includes('IRIDIUM')) {
+    list.push({ label: 'Iridium Ring Alert', freq: 1626.270, mode: 'FM', desc: 'Simplex Ring Alert Broadcast' });
+    list.push({ label: 'Iridium Data Link', freq: 1626.000, mode: 'FM', desc: 'Simplex Mobile Data Uplink/Down' });
+  } else if (name.includes('ONEWEB')) {
+    list.push({ label: 'Telemetry Beacon', freq: 1120.000, mode: 'FM', desc: 'OneWeb Space Telemetry Link' });
   } else {
-    list.push(
-      { label: 'Amateur Beacon', freq: 437.500, mode: 'FM', desc: 'Generic CubeSat Beacon' },
-      { label: 'Weather Sat',    freq: 137.100, mode: 'FM', desc: 'NOAA APT Downlink' },
-    );
+    list.push({ label: 'Amateur CubeSat', freq: 437.500, mode: 'FM', desc: 'Common Downlink Beacon' });
+    list.push({ label: 'Terrestrial VHF Test', freq: 145.825, mode: 'FM', desc: 'Common APRS Packet Frequency' });
   }
   return list;
 }
