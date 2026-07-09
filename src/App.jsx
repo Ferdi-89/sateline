@@ -324,9 +324,30 @@ function App() {
 
         // Fallback: If CelesTrak failed or returned no data (only individual fallbacks found)
         if (merged.length <= 15) {
-          console.warn('CelesTrak groups failed to fetch. Attempting fallback to SatNOGS TLE Database...');
+          console.warn('CelesTrak groups failed to fetch. Attempting fallback to local fallback_sats.json...');
           try {
-            const res = await fetchWithFallback('https://db.satnogs.org/api/tle/');
+            const res = await fetch('/fallback_sats.json');
+            if (res.ok) {
+              const fallbackData = await res.json();
+              if (fallbackData && fallbackData.length > 0) {
+                fallbackData.forEach(item => {
+                  if (!seen.has(item.name) && item.tle1 && item.tle2) {
+                    seen.add(item.name);
+                    merged.push(item);
+                  }
+                });
+              }
+            }
+          } catch (err) {
+            console.error('Failed to fetch local fallback_sats.json:', err);
+          }
+        }
+
+        // Secondary Fallback: If still empty/very few, attempt online SatNOGS TLE Database
+        if (merged.length <= 15) {
+          console.warn('Local fallback empty or failed. Fetching online SatNOGS TLE Database directly...');
+          try {
+            const res = await fetch('https://db.satnogs.org/api/tle/');
             if (res.ok) {
               const satnogsData = await res.json();
               if (satnogsData && satnogsData.length > 0) {
