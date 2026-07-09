@@ -18,6 +18,8 @@ import shutil
 import subprocess
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs
+import urllib.request
+from urllib.error import URLError, HTTPError
 
 # Add the 'driver' directory to the system PATH and DLL search directory
 # so that python and subprocesses can find dlls and executables (like rtl_test, rtl_sdr)
@@ -80,6 +82,11 @@ sdr_state = {
 
 # Real SDR instance (if connected)
 active_sdr = None
+
+# In-memory cache for proxy requests (CelesTrak / SatNOGS)
+# Structure: { url: { "expiry": timestamp, "data": bytes, "content_type": string } }
+proxy_cache = {}
+CACHE_DURATION_SEC = 3600  # 1 hour
 
 def check_physical_usb():
     """
@@ -526,6 +533,91 @@ class SDRRequestHandler(BaseHTTPRequestHandler):
             self._send_cors_headers()
             self.end_headers()
             self.wfile.write(json.dumps(status_payload).encode())
+
+        elif path == '/api/proxy':
+            target_urls = query.get('url', [])
+            if not target_urls:
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self._send_cors_headers()
+                self.end_headers()
+                self.wfile.write(b'{"error": "Missing url parameter"}')
+                return
+
+            target_url = target_urls[0]
+
+            # Security check: only allow proxying to CelesTrak and SatNOGS
+            parsed_target = urlparse(target_url)
+            allowed_domains = ['celestrak.org', 'celestrak.com', 'db.satnogs.org']
+            domain_ok = any(parsed_target.netloc.endswith(domain) for domain in allowed_domains)
+            
+            if not domain_ok:
+                self.send_response(403)
+                self.send_header('Content-Type', 'application/json')
+                self._send_cors_headers()
+                self.end_headers()
+                self.wfile.write(b'{"error": "Forbidden: Target domain not allowed"}')
+                return
+
+            # Check cache
+            now = time.time()
+            if target_url in proxy_cache:
+                cache_entry = proxy_cache[target_url]
+                if now < cache_entry['expiry']:
+                    self.send_response(200)
+                    self.send_header('Content-Type', cache_entry.get('content_type', 'text/plain'))
+                    self.send_header('X-Cache', 'HIT')
+                    self._send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(cache_entry['data'])
+                    return
+
+            # Cache miss - fetch from remote server
+            try:
+                # Set a reasonable User-Agent
+                req = urllib.request.Request(
+                    target_url, 
+                    headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+                )
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    data = response.read()
+                    content_type = response.info().get_content_type() or 'text/plain'
+                    
+                    # Cache the successful response
+                    proxy_cache[target_url] = {
+                        'expiry': now + CACHE_DURATION_SEC,
+                        'data': data,
+                        'content_type': content_type
+                    }
+
+                    self.send_response(200)
+                    self.send_header('Content-Type', content_type)
+                    self.send_header('X-Cache', 'MISS')
+                    self._send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
+            except HTTPError as e:
+                self.send_response(e.code)
+                self.send_header('Content-Type', 'application/json')
+                self._send_cors_headers()
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": f"HTTP Error {e.code}"}).encode())
+                return
+            except URLError as e:
+                self.send_response(502)
+                self.send_header('Content-Type', 'application/json')
+                self._send_cors_headers()
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": f"Bad Gateway: {e.reason}"}).encode())
+                return
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self._send_cors_headers()
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": f"Internal Error: {str(e)}"}).encode())
+                return
 
         elif path == '/api/waterfall':
             bins = int(query.get('bins', [128])[0])

@@ -47,6 +47,39 @@ function parseTLE(text, category) {
   return sats;
 }
 
+// Helper to fetch data trying local server proxy first, then public CORS proxies
+async function fetchWithFallback(targetUrl) {
+  // 1. Try local proxy
+  try {
+    const localProxyUrl = `http://localhost:8055/api/proxy?url=${encodeURIComponent(targetUrl)}`;
+    const res = await fetch(localProxyUrl);
+    if (res.ok) return res;
+  } catch (err) {
+    // Local proxy offline or failed
+  }
+
+  // 2. Try public CORS proxy (corsproxy.io)
+  try {
+    const publicProxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`;
+    const res = await fetch(publicProxyUrl);
+    if (res.ok) return res;
+  } catch (err) {
+    // Public proxy failed
+  }
+
+  // 3. Try another public CORS proxy (allorigins)
+  try {
+    const publicProxyUrl2 = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+    const res = await fetch(publicProxyUrl2);
+    if (res.ok) return res;
+  } catch (err) {
+    // Second public proxy failed
+  }
+
+  // 4. Final attempt: direct fetch
+  return fetch(targetUrl);
+}
+
 // Helper to fetch satellite from CelesTrak by NORAD ID with a local fallback
 async function fetchSatelliteByNorad(noradId, name, fallbackTle1, fallbackTle2, category = 'other') {
   const fallback = [{
@@ -56,7 +89,7 @@ async function fetchSatelliteByNorad(noradId, name, fallbackTle1, fallbackTle2, 
     category,
   }];
   try {
-    const res = await fetch(`https://celestrak.org/NORAD/elements/gp.php?CATNR=${noradId}&FORMAT=tle`);
+    const res = await fetchWithFallback(`https://celestrak.org/NORAD/elements/gp.php?CATNR=${noradId}&FORMAT=tle`);
     if (res.ok) {
       const text = await res.text();
       const sats = parseTLE(text, category);
@@ -110,7 +143,7 @@ async function fetchLapanA2() {
     category: 'other',
   }];
   try {
-    const res = await fetch('https://db.satnogs.org/api/tle/?norad_cat_id=40931');
+    const res = await fetchWithFallback('https://db.satnogs.org/api/tle/?norad_cat_id=40931');
     if (res.ok) {
       const data = await res.json();
       if (data && data.length > 0) {
@@ -155,7 +188,7 @@ async function fetchNoaaSatellites() {
     const promises = fallbacks.map(async (sat) => {
       const norad_id = sat.tle1.split(' ')[1].replace('U', '').trim();
       try {
-        const res = await fetch(`https://db.satnogs.org/api/tle/?norad_cat_id=${norad_id}`);
+        const res = await fetchWithFallback(`https://db.satnogs.org/api/tle/?norad_cat_id=${norad_id}`);
         if (res.ok) {
           const data = await res.json();
           if (data && data.length > 0) {
@@ -261,7 +294,7 @@ function App() {
         const results = await Promise.all([
           ...GROUPS.map(async ({ group, category: cat, limit }) => {
             try {
-              const res = await fetch(
+              const res = await fetchWithFallback(
                 `https://celestrak.org/NORAD/elements/gp.php?GROUP=${group}&FORMAT=tle`
               );
               if (!res.ok) return [];
