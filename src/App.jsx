@@ -321,6 +321,48 @@ function App() {
             merged.push(sat);
           }
         });
+
+        // Fallback: If CelesTrak failed or returned no data (only individual fallbacks found)
+        if (merged.length <= 15) {
+          console.warn('CelesTrak groups failed to fetch. Attempting fallback to SatNOGS TLE Database...');
+          try {
+            const res = await fetchWithFallback('https://db.satnogs.org/api/tle/');
+            if (res.ok) {
+              const satnogsData = await res.json();
+              if (satnogsData && satnogsData.length > 0) {
+                satnogsData.forEach(item => {
+                  const name = item.tle0 ? item.tle0.replace(/^0\s+/, '').trim() : `SAT ${item.norad_cat_id}`;
+                  if (!seen.has(name) && item.tle1 && item.tle2) {
+                    seen.add(name);
+                    
+                    // Determine category
+                    let category = 'other';
+                    const upperName = name.toUpperCase();
+                    if (upperName.includes('NOAA') || upperName.includes('METEOR') || upperName.includes('METOP') || upperName.includes('FENGYUN')) {
+                      category = 'weather';
+                    } else if (upperName.includes('STARLINK')) {
+                      category = 'starlink';
+                    } else if (upperName.includes('ISS') || upperName.includes('CSS') || upperName.includes('TIANGONG')) {
+                      category = 'station';
+                    } else if (upperName.includes('GPS') || upperName.includes('GLONASS') || upperName.includes('GALILEO') || upperName.includes('BEIDOU')) {
+                      category = 'gps';
+                    }
+                    
+                    merged.push({
+                      name,
+                      tle1: item.tle1,
+                      tle2: item.tle2,
+                      category,
+                    });
+                  }
+                });
+              }
+            }
+          } catch (err) {
+            console.error('Failed to fetch SatNOGS fallback database:', err);
+          }
+        }
+
         setAllSatellites(merged);
       } catch (err) {
         console.error('Failed to fetch satellite data:', err);
